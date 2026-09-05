@@ -48,6 +48,8 @@ export default function Omnichannel() {
   const [inputMsg, setInputMsg] = useState('');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [aiInsight, setAiInsight] = useState<{summary: string, sentiment: string, suggestion: string} | null>(null);
+  const [isAiLoading, setIsAiLoading] = useState(false);
 
   // Firestore Subscription: Conversations
   useEffect(() => {
@@ -109,6 +111,29 @@ export default function Omnichannel() {
     
     setInputMsg('');
     await addDoc(collection(db, 'messages'), newMsg);
+  };
+
+  const handleGenerateInsight = async () => {
+    if (messages.length === 0) return;
+    setIsAiLoading(true);
+    setAiInsight(null);
+    try {
+      const res = await fetch('/api/copilot/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAiInsight(data);
+      } else {
+        console.error('Failed to fetch AI insights');
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsAiLoading(false);
+    }
   };
 
   return (
@@ -298,47 +323,79 @@ export default function Omnichannel() {
 
         {/* AI Copilot Panel */}
         <div className="flex-1 overflow-y-auto bg-indigo-50/30">
-          <div className="p-4 border-b border-slate-100 flex items-center gap-2 bg-indigo-50/80">
-            <Bot className="w-5 h-5 text-indigo-600" />
-            <h4 className="font-bold text-indigo-900 text-sm">Octo8 Copilot</h4>
+          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-indigo-50/80">
+            <div className="flex items-center gap-2">
+              <Bot className="w-5 h-5 text-indigo-600" />
+              <h4 className="font-bold text-indigo-900 text-sm">Octo8 Copilot</h4>
+            </div>
+            <button 
+              onClick={handleGenerateInsight}
+              disabled={isAiLoading || messages.length === 0}
+              className="px-2 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white rounded text-xs font-bold transition-colors flex items-center gap-1 shadow-sm"
+            >
+              {isAiLoading ? 'Analisando...' : 'Analisar Chat'}
+            </button>
           </div>
           
           <div className="p-4 space-y-4">
-            {/* Resumo da Conversa */}
-            <div className="bg-white border border-indigo-100 rounded-lg p-3 shadow-sm">
-              <h5 className="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-2 flex items-center gap-1">
-                <FileText className="w-3.5 h-3.5" /> Resumo do Problema
-              </h5>
-              <p className="text-sm text-slate-700 leading-relaxed">
-                Cliente relata queda de conexão (LOS Vermelho provável). CPF já confirmado.
-              </p>
-            </div>
-
-            {/* Sugestão de Resposta */}
-            <div className="bg-white border border-indigo-100 rounded-lg p-3 shadow-sm relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-1 h-full bg-emerald-400"></div>
-              <h5 className="text-xs font-bold text-emerald-700 uppercase tracking-wider mb-2 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Resposta Sugerida
-              </h5>
-              <p className="text-sm text-slate-700 leading-relaxed italic">
-                "Carlos, confirmei aqui e há um rompimento massivo na sua região. A equipe já está no local e a previsão de retorno é de 2 horas. Deseja que eu ative um pacote extra 4G na sua linha móvel?"
-              </p>
-              <button className="mt-3 w-full py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded text-xs font-bold transition-colors">
-                Usar Resposta
-              </button>
-            </div>
-            
-            {/* Risco Churn */}
-            <div className="bg-white border border-indigo-100 rounded-lg p-3 shadow-sm">
-              <div className="flex justify-between items-center mb-1">
-                <h5 className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Risco de Churn</h5>
-                <span className="text-xs font-bold text-amber-600">Médio (45%)</span>
+            {!aiInsight && !isAiLoading && (
+              <div className="text-center p-6">
+                <Bot className="w-12 h-12 text-indigo-200 mx-auto mb-2" />
+                <p className="text-xs text-indigo-400 font-medium">Clique em Analisar Chat para a IA ler as mensagens e extrair contexto.</p>
               </div>
-              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-amber-500 w-[45%]"></div>
-              </div>
-            </div>
+            )}
 
+            {isAiLoading && (
+              <div className="flex items-center justify-center p-8">
+                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+              </div>
+            )}
+
+            {aiInsight && !isAiLoading && (
+              <>
+                {/* Resumo da Conversa */}
+                <div className="bg-white border border-indigo-100 rounded-lg p-3 shadow-sm">
+                  <h5 className="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-2 flex items-center gap-1">
+                    <FileText className="w-3.5 h-3.5" /> Resumo do Problema
+                  </h5>
+                  <p className="text-sm text-slate-700 leading-relaxed">
+                    {aiInsight.summary}
+                  </p>
+                </div>
+
+                {/* Sugestão de Resposta */}
+                <div className="bg-white border border-indigo-100 rounded-lg p-3 shadow-sm relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-1 h-full bg-emerald-400"></div>
+                  <h5 className="text-xs font-bold text-emerald-700 uppercase tracking-wider mb-2 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Resposta Sugerida
+                  </h5>
+                  <p className="text-sm text-slate-700 leading-relaxed italic">
+                    "{aiInsight.suggestion}"
+                  </p>
+                  <button 
+                    onClick={() => setInputMsg(aiInsight.suggestion)}
+                    className="mt-3 w-full py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded text-xs font-bold transition-colors"
+                  >
+                    Usar Resposta
+                  </button>
+                </div>
+                
+                {/* Sentiment */}
+                <div className="bg-white border border-indigo-100 rounded-lg p-3 shadow-sm">
+                  <div className="flex justify-between items-center mb-1">
+                    <h5 className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Sentimento do Cliente</h5>
+                    <span className={cn(
+                      "text-xs font-bold px-2 py-0.5 rounded uppercase",
+                      aiInsight.sentiment === 'POSITIVO' ? 'bg-emerald-100 text-emerald-700' :
+                      aiInsight.sentiment === 'NEGATIVO' ? 'bg-red-100 text-red-700' :
+                      'bg-slate-100 text-slate-700'
+                    )}>
+                      {aiInsight.sentiment}
+                    </span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
