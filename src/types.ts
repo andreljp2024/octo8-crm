@@ -51,3 +51,26 @@ export interface ChannelStatus {
   status: 'ONLINE' | 'DEGRADED' | 'OFFLINE';
   activeConversations: number;
 }
+
+export type CallStatus = 'NEW' | 'RINGING' | 'ANSWERED' | 'ON_HOLD' | 'TRANSFERRING' | 'CONNECTED' | 'ENDED';
+export interface Call {
+  id: string;
+  tenantId: string;
+  caller: string;
+  destination: string;
+  queueId?: string;
+  agentId?: string;
+  status: CallStatus;
+  direction: 'INBOUND' | 'OUTBOUND' | 'INTERNAL';
+  startTime: string;
+  duration?: number;
+  recordingUrl?: string;
+}
+
+export interface AgentStatus {
+  id: string;
+  name: string;
+  status: User['status'];
+  currentCall?: Call;
+  timeInStatus: string;
+}
