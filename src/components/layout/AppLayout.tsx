@@ -10,6 +10,7 @@ import {
   Search,
   Bell,
   ChevronDown,
+  BookOpen,
   Menu
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
@@ -45,6 +46,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     { name: 'Customer 360', href: '/customers', icon: Users },
     { name: 'CRM & Vendas', href: '/crm', icon: Briefcase },
     { name: 'IA & Automação', href: '/ai', icon: Bot },
+    { name: 'Knowledge Base', href: '/knowledge', icon: BookOpen },
     { name: 'Configurações', href: '/settings', icon: Settings },
   ];
 
