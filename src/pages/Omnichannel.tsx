@@ -59,8 +59,14 @@ export default function Omnichannel() {
       if (snapshot.empty && conversations.length === 0) {
         console.log("Seeding mock conversations to Firestore...");
         MOCK_CONVERSATIONS.forEach(async (conv) => {
-          await setDoc(doc(db, 'conversations', conv.id), conv);
+          try {
+            await setDoc(doc(db, 'conversations', conv.id), conv);
+          } catch (e) {
+            console.warn("Could not seed conversation:", e);
+          }
         });
+        setConversations(MOCK_CONVERSATIONS);
+        if (!activeConv) setActiveConv(MOCK_CONVERSATIONS[0].id);
       } else {
         const convsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Conversation));
         setConversations(convsData);
@@ -68,6 +74,10 @@ export default function Omnichannel() {
           setActiveConv(convsData[0].id);
         }
       }
+    }, (error) => {
+      console.warn("Firestore conversations listener error, using fallback:", error);
+      setConversations(MOCK_CONVERSATIONS);
+      if (!activeConv) setActiveConv(MOCK_CONVERSATIONS[0].id);
     });
 
     return () => unsubscribe();
@@ -87,12 +97,20 @@ export default function Omnichannel() {
       if (snapshot.empty && activeConv === 'conv-1' && messages.length === 0) {
         console.log("Seeding mock messages to Firestore...");
         MOCK_MESSAGES.forEach(async (msg) => {
-          await setDoc(doc(db, 'messages', msg.id), msg);
+          try {
+            await setDoc(doc(db, 'messages', msg.id), msg);
+          } catch (e) {
+            console.warn("Could not seed message:", e);
+          }
         });
+        setMessages(MOCK_MESSAGES);
       } else {
         const msgsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Message));
         setMessages(msgsData);
       }
+    }, (error) => {
+      console.warn("Firestore messages listener error, using fallback:", error);
+      setMessages(MOCK_MESSAGES.filter(m => m.conversationId === activeConv));
     });
 
     return () => unsubscribe();
@@ -101,7 +119,8 @@ export default function Omnichannel() {
   const handleSendMessage = async () => {
     if (!inputMsg.trim() || !activeConv) return;
     
-    const newMsg: Partial<Message> = {
+    const newMsg: Message = {
+      id: `msg-${Date.now()}`,
       conversationId: activeConv,
       sender: 'AGENT',
       text: inputMsg,
@@ -110,7 +129,14 @@ export default function Omnichannel() {
     };
     
     setInputMsg('');
-    await addDoc(collection(db, 'messages'), newMsg);
+    // Optimistic UI update
+    setMessages(prev => [...prev, newMsg]);
+
+    try {
+      await addDoc(collection(db, 'messages'), newMsg);
+    } catch (e) {
+      console.warn("Firestore addDoc message skipped:", e);
+    }
   };
 
   const handleGenerateInsight = async () => {

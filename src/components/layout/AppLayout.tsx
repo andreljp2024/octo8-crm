@@ -28,8 +28,8 @@ const MOCK_TENANTS = [
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const [isSidebarOpen, setSidebarOpen] = React.useState(true);
-  const { user, logout } = useAuth();
-  const [activeTenant, setActiveTenant] = React.useState(MOCK_TENANTS[0]);
+  const [isTenantMenuOpen, setIsTenantMenuOpen] = React.useState(false);
+  const { user, logout, tenantId, tenantName, switchTenant } = useAuth();
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -64,12 +64,41 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="h-6 w-px bg-slate-200 mx-2 hidden sm:block"></div>
 
           {/* Tenant Context Selector */}
-          <div className="hidden sm:flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-md border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
-            <div className="flex flex-col">
-              <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Tenant Context</span>
-              <span className="text-sm font-semibold text-slate-800">{activeTenant.name}</span>
-            </div>
-            <ChevronDown className="w-4 h-4 text-slate-500 ml-2" />
+          <div className="relative hidden sm:block">
+            <button
+              onClick={() => setIsTenantMenuOpen(!isTenantMenuOpen)}
+              className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-md border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors text-left"
+            >
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tenant Atual</span>
+                <span className="text-sm font-bold text-slate-800">{tenantName || 'Alpha Provedor (ISP)'}</span>
+              </div>
+              <ChevronDown className={cn("w-4 h-4 text-slate-500 ml-2 transition-transform", isTenantMenuOpen && "rotate-180")} />
+            </button>
+
+            {isTenantMenuOpen && (
+              <div className="absolute left-0 mt-1 w-60 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50">
+                <div className="px-3 py-1.5 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Alternar Workspace Tenant
+                </div>
+                {MOCK_TENANTS.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => {
+                      switchTenant(t.id, t.name);
+                      setIsTenantMenuOpen(false);
+                    }}
+                    className={cn(
+                      "w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-slate-50 transition-colors",
+                      tenantId === t.id ? "bg-blue-50/70 text-blue-700 font-bold" : "text-slate-700 font-medium"
+                    )}
+                  >
+                    <span>{t.name}</span>
+                    <span className="text-[10px] font-mono text-slate-400">ID: {t.id}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -89,18 +118,26 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           
           <div className="flex items-center gap-3 border-l border-slate-200 pl-3">
             <div className="flex items-center gap-2 cursor-pointer group">
-              <div className="h-8 w-8 rounded-full bg-blue-100 overflow-hidden border border-blue-200 flex items-center justify-center text-blue-700 font-bold">
-                {user?.email?.charAt(0).toUpperCase() || 'U'}
-              </div>
+              {user?.photoURL ? (
+                <img src={user.photoURL} alt="Avatar" className="h-8 w-8 rounded-full border border-slate-200" />
+              ) : (
+                <div className="h-8 w-8 rounded-full bg-blue-100 overflow-hidden border border-blue-200 flex items-center justify-center text-blue-700 font-bold text-xs">
+                  {user?.displayName?.charAt(0) || user?.email?.charAt(0).toUpperCase() || 'A'}
+                </div>
+              )}
               <div className="hidden md:block">
-                <p className="text-sm font-semibold text-slate-700 leading-tight">{user?.email?.split('@')[0]}</p>
-                <p className="text-[10px] font-medium text-slate-500 uppercase">Admin</p>
+                <p className="text-sm font-semibold text-slate-700 leading-tight">
+                  {user?.displayName || user?.email?.split('@')[0] || 'Administrador'}
+                </p>
+                <p className="text-[10px] font-medium text-slate-500 uppercase">
+                  {user?.isDemo ? 'Admin (Demo)' : 'Admin'}
+                </p>
               </div>
             </div>
             
             <button 
               onClick={logout}
-              title="Sair"
+              title="Sair da Plataforma"
               className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
             >
               <LogOut className="w-5 h-5" />

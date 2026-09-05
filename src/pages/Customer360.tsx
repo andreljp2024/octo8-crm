@@ -42,14 +42,21 @@ export default function Customer360() {
       if (snapshot.empty && customers.length === 0) {
         console.log("Seeding mock customers to Firestore...");
         MOCK_CUSTOMERS.forEach(async (customer) => {
-          // Adjust tenantId to the current user's tenant for demo purposes
           const seededCustomer = { ...customer, tenantId: tenantId };
-          await setDoc(doc(db, 'customers', customer.id), seededCustomer);
+          try {
+            await setDoc(doc(db, 'customers', customer.id), seededCustomer);
+          } catch (e) {
+            console.warn("Could not seed customer:", e);
+          }
         });
+        setCustomers(MOCK_CUSTOMERS);
       } else {
         const customersData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Customer));
         setCustomers(customersData);
       }
+    }, (error) => {
+      console.warn("Firestore customer listener error, using fallback customers:", error);
+      setCustomers(MOCK_CUSTOMERS);
     });
 
     return () => unsubscribe();

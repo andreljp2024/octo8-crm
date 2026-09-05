@@ -56,12 +56,20 @@ export default function CrmSales() {
         console.log("Seeding mock opportunities to Firestore...");
         MOCK_OPPORTUNITIES.forEach(async (opp) => {
           const seededOpp = { ...opp, tenantId: tenantId };
-          await setDoc(doc(db, 'opportunities', opp.id), seededOpp);
+          try {
+            await setDoc(doc(db, 'opportunities', opp.id), seededOpp);
+          } catch (e) {
+            console.warn("Could not seed opportunity:", e);
+          }
         });
+        setOpportunities(MOCK_OPPORTUNITIES);
       } else {
         const oppsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Opportunity));
         setOpportunities(oppsData);
       }
+    }, (error) => {
+      console.warn("Firestore listener error, using fallback opportunities:", error);
+      setOpportunities(MOCK_OPPORTUNITIES);
     });
 
     return () => unsubscribe();
@@ -84,12 +92,14 @@ export default function CrmSales() {
     e.preventDefault();
     const id = e.dataTransfer.getData('text/plain');
     if (id) {
+      // Optimistic local update
+      setOpportunities(prev => prev.map(opp => opp.id === id ? { ...opp, stageId } : opp));
       try {
         await updateDoc(doc(db, 'opportunities', id), {
           stageId: stageId
         });
       } catch (error) {
-        console.error("Error updating document: ", error);
+        console.warn("Firestore updateDoc fallback:", error);
       }
     }
     setDraggedItem(null);

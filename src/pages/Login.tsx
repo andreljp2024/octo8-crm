@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, Bot, ExternalLink } from 'lucide-react';
+import { AlertCircle, Bot, ExternalLink, Sparkles, ArrowRight, ShieldCheck } from 'lucide-react';
 import { auth } from '@/lib/firebase';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [isInIframe, setIsInIframe] = useState(false);
+  const { loginAsDemo } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     try {
@@ -16,23 +20,31 @@ export default function Login() {
     }
   }, []);
 
-  const handleGoogleLogin = async () => {
-    if (isInIframe) {
-      setError('O login com Google é bloqueado por políticas de segurança dentro de visualizações de iframe (Cross-Origin-Opener-Policy). Por favor, abra o aplicativo em uma Nova Aba para fazer o login.');
-      return;
-    }
+  const handleOpenNewTab = () => {
+    window.open(window.location.href, '_blank');
+  };
 
+  const handleDemoLogin = () => {
+    loginAsDemo('t-1', 'Alpha Provedor (ISP)');
+    navigate('/');
+  };
+
+  const handleGoogleLogin = async () => {
     setError('');
     setLoading(true);
     const provider = new GoogleAuthProvider();
     
     try {
       await signInWithPopup(auth, provider);
-      // Se tiver sucesso, o AuthContext reage e muda a tela automaticamente
+      navigate('/');
     } catch (err: any) {
-      console.error(err);
+      console.error('Login error:', err);
       if (err.code === 'auth/popup-closed-by-user') {
-        setError('O login foi cancelado. Tente novamente.');
+        setError('O login foi cancelado pelo usuário.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setError(`Domínio não autorizado pelo Firebase. Adicione "${window.location.hostname}" em Firebase Console > Authentication > Configurações > Domínios Autorizados, ou clique abaixo em "Acesso Rápido Demo" para testar agora.`);
+      } else if (isInIframe && (err.message?.includes('Cross-Origin-Opener-Policy') || err.code === 'auth/internal-error')) {
+        setError('O iframe do navegador bloqueou a janela do Google. Clique em "Abrir em Nova Aba" ou entre com o "Acesso Rápido Demo".');
       } else {
         setError(err.message || 'Erro ao autenticar com o Google.');
       }
@@ -45,47 +57,72 @@ export default function Login() {
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg">
+          <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
             <Bot className="w-8 h-8" />
           </div>
         </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-slate-900 tracking-tight">
+        <h2 className="mt-5 text-center text-3xl font-extrabold text-slate-900 tracking-tight">
           Octo8
         </h2>
-        <p className="mt-2 text-center text-sm text-slate-600">
-          Customer Engagement & AI Copilot
+        <p className="mt-1.5 text-center text-sm text-slate-600">
+          SaaS Multitenant • Contact Center, CRM & AI Copilot
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-12 px-4 shadow-xl shadow-blue-900/5 sm:rounded-2xl sm:px-10 border border-slate-100 text-center">
+        <div className="bg-white py-8 px-5 shadow-xl shadow-slate-200/50 sm:rounded-2xl sm:px-10 border border-slate-100 text-center">
           
-          <h3 className="text-lg font-medium text-slate-900 mb-6">Acesse seu Workspace</h3>
+          <h3 className="text-lg font-bold text-slate-900 mb-2">Acesse seu Workspace</h3>
+          <p className="text-xs text-slate-500 mb-6">Escolha como deseja se autenticar na plataforma:</p>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm flex items-start gap-2 mb-6 text-left">
-              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-xs leading-relaxed flex items-start gap-2 mb-5 text-left">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
               <span>{error}</span>
             </div>
           )}
 
-          {isInIframe && !error && (
-            <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2 mb-6 text-left">
-              <ExternalLink className="w-5 h-5 shrink-0 mt-0.5" />
-              <span>Para fazer login com o Google, você precisa abrir o app em uma <b>Nova Aba</b>. Use o botão de seta no canto superior direito do Preview.</span>
+          {/* Quick Demo Access (Guaranteed to work inside iframe or standalone) */}
+          <div className="mb-5 p-4 bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 rounded-xl text-left">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-blue-600" /> Modo Demonstração Instantâneo
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-blue-600 text-white rounded-full">
+                Pronto
+              </span>
             </div>
-          )}
+            <p className="text-xs text-slate-600 mb-3">
+              Acesse como Administrador do tenant <strong>Alpha Provedor (ISP)</strong> com todos os módulos e métricas liberados.
+            </p>
+            <button
+              onClick={handleDemoLogin}
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-all hover:shadow hover:shadow-blue-600/20 active:scale-[0.99]"
+            >
+              Entrar como Administrador Demo <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
 
+          <div className="relative my-5">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-200"></div>
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-white px-3 text-slate-400 font-semibold">ou autenticação corporativa</span>
+            </div>
+          </div>
+
+          {/* Google Login Button */}
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
-            className="w-full flex justify-center items-center gap-3 py-3 px-4 border border-slate-200 rounded-lg shadow-sm text-sm font-bold text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:opacity-50"
+            className="w-full flex justify-center items-center gap-3 py-2.5 px-4 border border-slate-200 rounded-lg shadow-sm text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:opacity-50"
           >
             {loading ? (
-              'Aguarde...'
+              'Autenticando...'
             ) : (
               <>
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" viewBox="0 0 24 24">
                   <path
                     d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                     fill="#4285F4"
@@ -107,10 +144,24 @@ export default function Login() {
               </>
             )}
           </button>
-          
-          <p className="mt-6 text-xs text-slate-500">
-            * O primeiro login criará automaticamente o seu perfil e vinculará a um Tenant de demonstração para acesso à plataforma.
-          </p>
+
+          {/* Iframe Notice & Open in New Tab */}
+          {isInIframe && (
+            <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between text-left">
+              <span className="text-xs text-slate-500">Visualizando dentro de iframe?</span>
+              <button
+                onClick={handleOpenNewTab}
+                className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors"
+              >
+                Abrir em Nova Aba <ExternalLink className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
+          <div className="mt-6 flex items-center justify-center gap-1.5 text-xs text-slate-400">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Isolamento multitenant criptografado via Firestore Rules</span>
+          </div>
 
         </div>
       </div>

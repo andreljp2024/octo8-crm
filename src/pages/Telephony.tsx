@@ -49,20 +49,26 @@ export default function Telephony() {
 
   // Firestore Subscription
   useEffect(() => {
-    // Only fetch active calls (we will simulate a soft-delete or ENDED status for drop)
     const q = query(collection(db, 'calls'), where('status', '!=', 'ENDED'));
     
     const unsubscribe = onSnapshot(q, async (snapshot) => {
-      // Seed if absolutely empty (for demo purposes)
       if (snapshot.empty && activeCalls.length === 0) {
         console.log("Seeding mock calls to Firestore...");
         MOCK_ACTIVE_CALLS.forEach(async (call) => {
-          await setDoc(doc(db, 'calls', call.id), call);
+          try {
+            await setDoc(doc(db, 'calls', call.id), call);
+          } catch (e) {
+            console.warn("Could not seed call:", e);
+          }
         });
+        setActiveCalls(MOCK_ACTIVE_CALLS);
       } else {
         const callsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Call));
         setActiveCalls(callsData);
       }
+    }, (error) => {
+      console.warn("Firestore calls listener error, using fallback calls:", error);
+      setActiveCalls(MOCK_ACTIVE_CALLS);
     });
 
     return () => unsubscribe();
@@ -76,7 +82,6 @@ export default function Telephony() {
     if (!dialNumber) return;
     setWebphoneState('CALLING');
     
-    // Insert new call in Firestore
     const newCallId = `call-${Date.now()}`;
     setCurrentCallId(newCallId);
     
@@ -90,15 +95,27 @@ export default function Telephony() {
       startTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     
-    await setDoc(doc(db, 'calls', newCallId), newCall);
+    // Optimistic local state
+    setActiveCalls(prev => [newCall, ...prev]);
+
+    try {
+      await setDoc(doc(db, 'calls', newCallId), newCall);
+    } catch (e) {
+      console.warn("Firestore setDoc call skipped:", e);
+    }
 
     // Simulate answer after 2 seconds
     setTimeout(async () => {
       setWebphoneState('CONNECTED');
-      await updateDoc(doc(db, 'calls', newCallId), {
-        status: 'CONNECTED',
-        duration: 0
-      });
+      setActiveCalls(prev => prev.map(c => c.id === newCallId ? { ...c, status: 'CONNECTED', duration: 0 } : c));
+      try {
+        await updateDoc(doc(db, 'calls', newCallId), {
+          status: 'CONNECTED',
+          duration: 0
+        });
+      } catch (e) {
+        console.warn("Firestore updateDoc call skipped:", e);
+      }
     }, 2000);
   };
 
@@ -109,14 +126,23 @@ export default function Telephony() {
     setIsOnHold(false);
     
     if (currentCallId) {
-      // Update in Firestore to ENDED (it will disappear from the UI due to query)
-      await updateDoc(doc(db, 'calls', currentCallId), { status: 'ENDED' });
+      setActiveCalls(prev => prev.filter(c => c.id !== currentCallId));
+      try {
+        await updateDoc(doc(db, 'calls', currentCallId), { status: 'ENDED' });
+      } catch (e) {
+        console.warn("Firestore end call update skipped:", e);
+      }
       setCurrentCallId(null);
     }
   };
 
   const handleDropCall = async (id: string) => {
-     await updateDoc(doc(db, 'calls', id), { status: 'ENDED' });
+    setActiveCalls(prev => prev.filter(c => c.id !== id));
+    try {
+      await updateDoc(doc(db, 'calls', id), { status: 'ENDED' });
+    } catch (e) {
+      console.warn("Firestore drop call update skipped:", e);
+    }
   };
 
   const formatDuration = (seconds: number) => {

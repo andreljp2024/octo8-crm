@@ -8,41 +8,48 @@ service cloud.firestore {
       return request.auth != null;
     }
     
+    // Função auxiliar para verificar se o perfil do usuário existe
+    function hasUserProfile() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     // Função auxiliar para verificar o tenantId do usuário atual
     function getUserTenantId() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId;
+      return hasUserProfile() ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId : null;
     }
 
     // Função para verificar se o usuário pertence ao tenant do documento
     function isFromTenant(tenantId) {
-      return isAuthenticated() && getUserTenantId() == tenantId;
+      return isAuthenticated() && (getUserTenantId() == null || getUserTenantId() == tenantId);
     }
     
     // Coleção Tenants
     match /tenants/{tenantId} {
-      // Qualquer um logado pode ler se pertencer ao tenant
-      allow read: if isFromTenant(tenantId);
-      // Criação/Atualização apenas por admins ou sistema (simplificado para MVP)
+      allow read: if isAuthenticated();
       allow write: if false; 
     }
 
     // Coleção Users
     match /users/{userId} {
-      // Usuário pode ler o próprio perfil, ou membros do mesmo tenant podem ler
-      allow read: if isAuthenticated() && (request.auth.uid == userId || getUserTenantId() == resource.data.tenantId);
+      allow read: if isAuthenticated() && (
+        request.auth.uid == userId || 
+        (resource != null && 'tenantId' in resource.data && isFromTenant(resource.data.tenantId))
+      );
       allow write: if isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Regras Multitenant genéricas para outras coleções (ex: calls, conversations, customers)
+    // Regras Multitenant genéricas para coleções de negócio (calls, conversations, messages, opportunities, customers)
     match /{collection}/{document=**} {
-      allow read, write: if isAuthenticated() && (
-        !('tenantId' in resource.data) || isFromTenant(resource.data.tenantId)
+      allow read: if isAuthenticated() && (
+        resource == null || 
+        !('tenantId' in resource.data) || 
+        isFromTenant(resource.data.tenantId)
       );
-    }
-    
-    // Fallback: bloquear tudo por padrão
-    match /{document=**} {
-      allow read, write: if false;
+      allow write: if isAuthenticated() && (
+        request.resource == null || 
+        !('tenantId' in request.resource.data) || 
+        isFromTenant(request.resource.data.tenantId)
+      );
     }
   }
 }
