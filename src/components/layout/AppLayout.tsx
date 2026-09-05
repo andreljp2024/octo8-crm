@@ -11,7 +11,8 @@ import {
   Bell,
   ChevronDown,
   BookOpen,
-  Menu
+  Menu,
+  BarChart3
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -47,6 +48,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     { name: 'CRM & Vendas', href: '/crm', icon: Briefcase },
     { name: 'IA & Automação', href: '/ai', icon: Bot },
     { name: 'Knowledge Base', href: '/knowledge', icon: BookOpen },
+    { name: 'Relatórios', href: '/reports', icon: BarChart3 },
     { name: 'Configurações', href: '/settings', icon: Settings },
   ];
 

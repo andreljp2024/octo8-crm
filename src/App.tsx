@@ -9,7 +9,12 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import Dashboard from '@/pages/Dashboard';
 import Telephony from '@/pages/Telephony';
 import Omnichannel from '@/pages/Omnichannel';
-import PlaceholderPage from '@/pages/PlaceholderPage';
+import CrmSales from '@/pages/CrmSales';
+import Customer360 from '@/pages/Customer360';
+import AiAutomation from '@/pages/AiAutomation';
+import TenantSettings from '@/pages/TenantSettings';
+import KnowledgeBase from '@/pages/KnowledgeBase';
+import Reports from '@/pages/Reports';
 
 export default function App() {
   return (
@@ -19,10 +24,12 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/omnichannel" element={<Omnichannel />} />
           <Route path="/telephony" element={<Telephony />} />
-          <Route path="/customers" element={<PlaceholderPage title="Customer 360" />} />
-          <Route path="/crm" element={<PlaceholderPage title="CRM & Vendas" />} />
-          <Route path="/ai" element={<PlaceholderPage title="IA & Automação" />} />
-          <Route path="/settings" element={<PlaceholderPage title="Configurações do Tenant" />} />
+          <Route path="/customers" element={<Customer360 />} />
+          <Route path="/crm" element={<CrmSales />} />
+          <Route path="/ai" element={<AiAutomation />} />
+          <Route path="/knowledge" element={<KnowledgeBase />} />
+          <Route path="/reports" element={<Reports />} />
+          <Route path="/settings" element={<TenantSettings />} />
         </Routes>
       </AppLayout>
     </BrowserRouter>
