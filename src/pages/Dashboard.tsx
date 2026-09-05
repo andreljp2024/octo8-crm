@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Phone, Users, Clock, AlertTriangle, 
   CheckCircle2, XCircle, Activity, BarChart3,
@@ -8,6 +8,39 @@ import { cn } from '@/lib/utils';
 import { StatsOverview } from '@/components/StatsOverview';
 
 export default function Dashboard() {
+  const [metrics, setMetrics] = useState({
+    mrr: 0,
+    activeCustomers: 0,
+    churnRisk: 0,
+    activeCalls: 312, // Mocked for real-time volatility feeling
+    sla: 82.4
+  });
+
+  useEffect(() => {
+    // Fetch real metrics from our Express backend
+    fetch('/api/metrics')
+      .then(res => res.json())
+      .then(data => {
+        setMetrics(prev => ({
+          ...prev,
+          mrr: data.mrr,
+          activeCustomers: data.activeCustomers,
+          churnRisk: data.churnRisk
+        }));
+      })
+      .catch(err => console.error("Error fetching metrics:", err));
+
+    // Simulate real-time active calls fluctuation
+    const interval = setInterval(() => {
+      setMetrics(prev => ({
+        ...prev,
+        activeCalls: Math.max(100, Math.min(500, prev.activeCalls + Math.floor(Math.random() * 11) - 5))
+      }));
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -37,22 +70,22 @@ export default function Dashboard() {
         />
         <KpiCard 
           title="Fila de Espera (URA)" 
-          value="45" 
+          value={metrics.churnRisk.toString()} 
           subtext="TME: 03:45 (Alerta Amarelo)" 
           icon={<Clock className="w-5 h-5 text-amber-600" />} 
           trend="+5"
-          alert
+          alert={metrics.churnRisk > 30}
         />
         <KpiCard 
           title="Chamadas Simultâneas" 
-          value="312" 
-          subtext="280 Inbound / 32 Outbound" 
+          value={metrics.activeCalls.toString()} 
+          subtext="Voz sobre IP Ativa" 
           icon={<PhoneCall className="w-5 h-5 text-indigo-600" />} 
-          trend="+15%"
+          trend="Ao Vivo"
         />
         <KpiCard 
           title="Nível de Serviço (SLA)" 
-          value="82.4%" 
+          value={`${metrics.sla}%`} 
           subtext="Meta: > 80% em 20s" 
           icon={<CheckCircle2 className="w-5 h-5 text-emerald-600" />} 
           trend="+1.2%"
@@ -145,7 +178,7 @@ function KpiCard({ title, value, subtext, icon, trend, alert }: any) {
       {alert && <div className="absolute top-0 left-0 w-full h-1 bg-amber-400"></div>}
       <div className="flex justify-between items-start">
         <div className="p-2 bg-slate-50 rounded-lg">{icon}</div>
-        <div className={cn("text-xs font-bold px-2 py-1 rounded-md", trend.startsWith('+') ? "text-emerald-700 bg-emerald-50" : "text-amber-700 bg-amber-50")}>
+        <div className={cn("text-xs font-bold px-2 py-1 rounded-md", trend.startsWith('+') ? "text-emerald-700 bg-emerald-50" : trend === 'Ao Vivo' ? "text-indigo-700 bg-indigo-50 animate-pulse" : "text-amber-700 bg-amber-50")}>
           {trend}
         </div>
       </div>
