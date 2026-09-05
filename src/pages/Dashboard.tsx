@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { 
   Phone, Users, Clock, AlertTriangle, 
   CheckCircle2, XCircle, Activity, BarChart3,
-  PhoneCall, PhoneOff, PhoneForwarded
+  PhoneCall, PhoneOff, PhoneForwarded, Download, FileText
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StatsOverview } from '@/components/StatsOverview';
+import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [metrics, setMetrics] = useState({
     mrr: 0,
     activeCustomers: 0,
@@ -15,6 +17,7 @@ export default function Dashboard() {
     activeCalls: 312, // Mocked for real-time volatility feeling
     sla: 82.4
   });
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
 
   useEffect(() => {
     // Fetch real metrics from our Express backend
@@ -41,6 +44,31 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  const handleDownloadCDR = () => {
+    const headers = ['Data/Hora', 'Origem (Caller)', 'Destino (Callee)', 'Duração', 'Status SIP', 'Codec', 'Gravação'];
+    const rows = [
+      ['05/09 10:30:12', '+55 11 99999-1111', 'URA Principal', '00:45', '200 OK (Atendida)', 'G.711u', 'Sim'],
+      ['05/09 10:25:04', 'Ramal 101', '+55 21 98888-2222', '12:30', '200 OK (Atendida)', 'Opus', 'Sim'],
+      ['05/09 10:15:33', '+55 31 97777-3333', 'Fila Comercial', '03:10', '487 Request Terminated (Abandonada)', '-', 'Não'],
+      ['05/09 10:10:55', 'Ramal 105', '+55 41 96666-4444', '00:00', '486 Busy Here (Ocupado)', '-', 'Não'],
+      ['05/09 09:55:18', '+55 11 97777-1234', 'Suporte N1 (FTTH)', '05:22', '200 OK (Atendida)', 'Opus', 'Sim'],
+      ['05/09 09:40:02', 'Ramal 102', '+55 19 98111-2233', '08:15', '200 OK (Atendida)', 'G.729', 'Sim'],
+    ];
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.map(f => `"${f}"`).join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `cdr_telefonia_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setDownloadSuccess(true);
+    setTimeout(() => setDownloadSuccess(false), 3000);
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -48,13 +76,23 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Operations Center - VoIP & Contact Center</h1>
           <p className="text-sm text-slate-500 mt-1">Visão global da operação, canais e saúde da telefonia PABX.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-sm bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-full border border-emerald-200 font-medium">
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-full border border-emerald-200 font-bold">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             SIP Trunk: ONLINE
           </div>
-          <button className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors shadow-sm">
-            Baixar Relatório (CDR)
+          <button 
+            onClick={() => navigate('/reports')}
+            className="flex items-center gap-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-2xs"
+          >
+            <FileText className="w-3.5 h-3.5 text-blue-600" /> Relatórios
+          </button>
+          <button 
+            onClick={handleDownloadCDR}
+            className="bg-slate-900 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors shadow-2xs flex items-center gap-1.5"
+          >
+            <Download className="w-3.5 h-3.5" /> 
+            {downloadSuccess ? 'Baixado!' : 'Baixar CDR (CSV)'}
           </button>
         </div>
       </div>
