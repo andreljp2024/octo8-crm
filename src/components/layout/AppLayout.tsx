@@ -12,33 +12,24 @@ import {
   ChevronDown,
   BookOpen,
   Menu,
-  BarChart3
+  BarChart3,
+  LogOut
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { User, Tenant } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
 
-// Mock data for initial render
-const MOCK_USER: User = {
-  id: 'u-1',
-  tenantId: 't-1',
-  name: 'Ana Silva',
-  email: 'ana@octo8.com',
-  role: 'TENANT_ADMIN',
-  departments: ['Atendimento'],
-  teams: ['Supervisão'],
-  status: 'ONLINE'
-};
-
-const MOCK_TENANTS: Tenant[] = [
-  { id: 't-1', name: 'Alpha Provedor (ISP)', segment: 'ISP', plan: 'PROFESSIONAL', capabilities: ['feature.whatsapp', 'feature.telephony'], status: 'ACTIVE' },
-  { id: 't-2', name: 'Beta Telecom', segment: 'ISP', plan: 'ENTERPRISE', capabilities: ['feature.whatsapp', 'feature.telephony', 'feature.ai.agent'], status: 'ACTIVE' }
+// Mock data for tenants
+const MOCK_TENANTS = [
+  { id: 't-1', name: 'Alpha Provedor (ISP)' },
+  { id: 't-2', name: 'Beta Telecom' }
 ];
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const [isSidebarOpen, setSidebarOpen] = React.useState(true);
-  const [activeTenant, setActiveTenant] = React.useState<Tenant>(MOCK_TENANTS[0]);
+  const { user, logout } = useAuth();
+  const [activeTenant, setActiveTenant] = React.useState(MOCK_TENANTS[0]);
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -95,8 +86,25 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <Bell className="w-5 h-5" />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
           </button>
-          <div className="h-8 w-8 rounded-full bg-slate-200 overflow-hidden border border-slate-300 flex items-center justify-center">
-             <span className="text-xs font-bold text-slate-600">{MOCK_USER.name.charAt(0)}</span>
+          
+          <div className="flex items-center gap-3 border-l border-slate-200 pl-3">
+            <div className="flex items-center gap-2 cursor-pointer group">
+              <div className="h-8 w-8 rounded-full bg-blue-100 overflow-hidden border border-blue-200 flex items-center justify-center text-blue-700 font-bold">
+                {user?.email?.charAt(0).toUpperCase() || 'U'}
+              </div>
+              <div className="hidden md:block">
+                <p className="text-sm font-semibold text-slate-700 leading-tight">{user?.email?.split('@')[0]}</p>
+                <p className="text-[10px] font-medium text-slate-500 uppercase">Admin</p>
+              </div>
+            </div>
+            
+            <button 
+              onClick={logout}
+              title="Sair"
+              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
           </div>
         </div>
       </header>

@@ -4,7 +4,8 @@
  */
 
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { AppLayout } from '@/components/layout/AppLayout';
 import Dashboard from '@/pages/Dashboard';
 import Telephony from '@/pages/Telephony';
@@ -15,24 +16,43 @@ import AiAutomation from '@/pages/AiAutomation';
 import TenantSettings from '@/pages/TenantSettings';
 import KnowledgeBase from '@/pages/KnowledgeBase';
 import Reports from '@/pages/Reports';
+import Login from '@/pages/Login';
+
+function ProtectedRoutes() {
+  const { user } = useAuth();
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return (
+    <AppLayout>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/omnichannel" element={<Omnichannel />} />
+        <Route path="/telephony" element={<Telephony />} />
+        <Route path="/customers" element={<Customer360 />} />
+        <Route path="/crm" element={<CrmSales />} />
+        <Route path="/ai" element={<AiAutomation />} />
+        <Route path="/knowledge" element={<KnowledgeBase />} />
+        <Route path="/reports" element={<Reports />} />
+        <Route path="/settings" element={<TenantSettings />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AppLayout>
+  );
+}
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AppLayout>
+    <AuthProvider>
+      <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/omnichannel" element={<Omnichannel />} />
-          <Route path="/telephony" element={<Telephony />} />
-          <Route path="/customers" element={<Customer360 />} />
-          <Route path="/crm" element={<CrmSales />} />
-          <Route path="/ai" element={<AiAutomation />} />
-          <Route path="/knowledge" element={<KnowledgeBase />} />
-          <Route path="/reports" element={<Reports />} />
-          <Route path="/settings" element={<TenantSettings />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/*" element={<ProtectedRoutes />} />
         </Routes>
-      </AppLayout>
-    </BrowserRouter>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
 

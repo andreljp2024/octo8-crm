@@ -2,10 +2,47 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // AVISO: Regras abertas temporariamente para a Fase 2 (Migração de Dados Real-time)
-    // Na Opção A (Autenticação), voltaremos as regras de validação de Tenant.
+    
+    // Função auxiliar para verificar autenticação
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Função auxiliar para verificar o tenantId do usuário atual
+    function getUserTenantId() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId;
+    }
+
+    // Função para verificar se o usuário pertence ao tenant do documento
+    function isFromTenant(tenantId) {
+      return isAuthenticated() && getUserTenantId() == tenantId;
+    }
+    
+    // Coleção Tenants
+    match /tenants/{tenantId} {
+      // Qualquer um logado pode ler se pertencer ao tenant
+      allow read: if isFromTenant(tenantId);
+      // Criação/Atualização apenas por admins ou sistema (simplificado para MVP)
+      allow write: if false; 
+    }
+
+    // Coleção Users
+    match /users/{userId} {
+      // Usuário pode ler o próprio perfil, ou membros do mesmo tenant podem ler
+      allow read: if isAuthenticated() && (request.auth.uid == userId || getUserTenantId() == resource.data.tenantId);
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Regras Multitenant genéricas para outras coleções (ex: calls, conversations, customers)
+    match /{collection}/{document=**} {
+      allow read, write: if isAuthenticated() && (
+        !('tenantId' in resource.data) || isFromTenant(resource.data.tenantId)
+      );
+    }
+    
+    // Fallback: bloquear tudo por padrão
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }

@@ -65,7 +65,7 @@ async function startServer() {
         }
       });
 
-      const jsonResult = JSON.parse(response.text() || '{}');
+      const jsonResult = JSON.parse(response.text || '{}');
       res.json(jsonResult);
     } catch (error) {
       console.error('Gemini error:', error);
