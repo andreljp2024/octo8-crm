@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Phone, PhoneCall, PhoneOff, Mic, MicOff, Pause, Play, 
   PhoneForwarded, Users, Clock, History, Search, Filter,
@@ -6,8 +6,10 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Call, AgentStatus } from '@/types';
+import { collection, onSnapshot, query, where, doc, setDoc, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
-// Mock Data
+// Mock Data (will still be used to seed the DB if empty, and for non-migrated tabs)
 const MOCK_ACTIVE_CALLS: Call[] = [
   { id: 'call-1', tenantId: 't-1', caller: '+55 11 99999-1111', destination: 'Suporte Técnico', status: 'CONNECTED', direction: 'INBOUND', startTime: '10:45', duration: 125, agentId: 'u-1' },
   { id: 'call-2', tenantId: 't-1', caller: '+55 21 98888-2222', destination: 'Comercial', status: 'RINGING', direction: 'INBOUND', startTime: '10:48' },
@@ -15,8 +17,8 @@ const MOCK_ACTIVE_CALLS: Call[] = [
 ];
 
 const MOCK_AGENTS: AgentStatus[] = [
-  { id: 'u-1', name: 'Ana Silva', status: 'BUSY', timeInStatus: '02:05', currentCall: MOCK_ACTIVE_CALLS[0] },
-  { id: 'u-2', name: 'Carlos Ferreira', status: 'ON_CALL', timeInStatus: '05:10', currentCall: MOCK_ACTIVE_CALLS[2] },
+  { id: 'u-1', name: 'Ana Silva', status: 'BUSY', timeInStatus: '02:05' },
+  { id: 'u-2', name: 'Carlos Ferreira', status: 'ON_CALL', timeInStatus: '05:10' },
   { id: 'u-3', name: 'Roberto Almeida', status: 'AVAILABLE', timeInStatus: '15:30' },
   { id: 'u-4', name: 'Mariana Souza', status: 'PAUSED', timeInStatus: '45:00' },
 ];
@@ -40,9 +42,81 @@ export default function Telephony() {
   const [isOnHold, setIsOnHold] = useState(false);
   const [activeTab, setActiveTab] = useState<'ACTIVE' | 'QUEUES' | 'CDR'>('ACTIVE');
   const [webphoneState, setWebphoneState] = useState<'IDLE' | 'CALLING' | 'CONNECTED'>('IDLE');
+  
+  // Real-time State
+  const [activeCalls, setActiveCalls] = useState<Call[]>([]);
+  const [currentCallId, setCurrentCallId] = useState<string | null>(null);
+
+  // Firestore Subscription
+  useEffect(() => {
+    // Only fetch active calls (we will simulate a soft-delete or ENDED status for drop)
+    const q = query(collection(db, 'calls'), where('status', '!=', 'ENDED'));
+    
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      // Seed if absolutely empty (for demo purposes)
+      if (snapshot.empty && activeCalls.length === 0) {
+        console.log("Seeding mock calls to Firestore...");
+        MOCK_ACTIVE_CALLS.forEach(async (call) => {
+          await setDoc(doc(db, 'calls', call.id), call);
+        });
+      } else {
+        const callsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Call));
+        setActiveCalls(callsData);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const handleDial = (digit: string) => {
     setDialNumber(prev => prev + digit);
+  };
+
+  const handleStartCall = async () => {
+    if (!dialNumber) return;
+    setWebphoneState('CALLING');
+    
+    // Insert new call in Firestore
+    const newCallId = `call-${Date.now()}`;
+    setCurrentCallId(newCallId);
+    
+    const newCall: Call = {
+      id: newCallId,
+      tenantId: 't-1',
+      caller: 'Ramal 101',
+      destination: dialNumber,
+      status: 'RINGING',
+      direction: 'OUTBOUND',
+      startTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    
+    await setDoc(doc(db, 'calls', newCallId), newCall);
+
+    // Simulate answer after 2 seconds
+    setTimeout(async () => {
+      setWebphoneState('CONNECTED');
+      await updateDoc(doc(db, 'calls', newCallId), {
+        status: 'CONNECTED',
+        duration: 0
+      });
+    }, 2000);
+  };
+
+  const handleEndCall = async () => {
+    setWebphoneState('IDLE');
+    setDialNumber('');
+    setIsMuted(false);
+    setIsOnHold(false);
+    
+    if (currentCallId) {
+      // Update in Firestore to ENDED (it will disappear from the UI due to query)
+      await updateDoc(doc(db, 'calls', currentCallId), { status: 'ENDED' });
+      setCurrentCallId(null);
+    }
+  };
+
+  const handleDropCall = async (id: string) => {
+     await updateDoc(doc(db, 'calls', id), { status: 'ENDED' });
   };
 
   const formatDuration = (seconds: number) => {
@@ -108,7 +182,7 @@ export default function Telephony() {
 
             {webphoneState === 'IDLE' ? (
               <button 
-                onClick={() => { if(dialNumber) setWebphoneState('CALLING'); setTimeout(() => setWebphoneState('CONNECTED'), 2000); }}
+                onClick={handleStartCall}
                 disabled={!dialNumber}
                 className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
               >
@@ -143,7 +217,7 @@ export default function Telephony() {
                   </button>
                 </div>
                 <button 
-                  onClick={() => { setWebphoneState('IDLE'); setDialNumber(''); setIsMuted(false); setIsOnHold(false); }}
+                  onClick={handleEndCall}
                   className="w-full h-14 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-colors shadow-sm"
                 >
                   <PhoneOff className="w-5 h-5 fill-current" /> Desligar
@@ -198,7 +272,7 @@ export default function Telephony() {
             )}
           >
             <PhoneCall className="w-4 h-4" /> Chamadas Ativas
-            <span className="bg-blue-100 text-blue-700 text-xs py-0.5 px-2 rounded-full">{MOCK_ACTIVE_CALLS.length}</span>
+            <span className="bg-blue-100 text-blue-700 text-xs py-0.5 px-2 rounded-full">{activeCalls.length}</span>
           </button>
           <button 
             onClick={() => setActiveTab('QUEUES')}
@@ -237,7 +311,7 @@ export default function Telephony() {
         <div className="flex-1 overflow-y-auto bg-slate-50/50 p-4">
           {activeTab === 'ACTIVE' && (
             <div className="space-y-3">
-              {MOCK_ACTIVE_CALLS.map(call => (
+              {activeCalls.map(call => (
                 <div key={call.id} className="bg-white border border-slate-200 rounded-xl p-4 flex items-center justify-between shadow-sm hover:shadow-md transition-shadow">
                   <div className="flex items-center gap-4">
                     <div className={cn(
@@ -286,7 +360,7 @@ export default function Telephony() {
                        <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Monitorar Chamada (Listen/Whisper)">
                         <Mic className="w-5 h-5" />
                        </button>
-                       <button className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Derrubar">
+                       <button onClick={() => handleDropCall(call.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Derrubar">
                         <PhoneOff className="w-5 h-5" />
                        </button>
                     </div>
