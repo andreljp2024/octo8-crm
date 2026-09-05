@@ -1,0 +1,11 @@
+{
+  "name": "Octo8",
+  "description": "SaaS Multitenant de Customer Engagement, Contact Center, CRM, Automação e IA",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
