@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   MessageSquare, Phone, User, Clock, CheckCircle2, 
   AlertTriangle, Bot, MoreVertical, Send, Paperclip, 
-  Mic, Image as ImageIcon, Search, Tag, Activity, FileText, PhoneForwarded 
+  Mic, Image as ImageIcon, Search, Tag, Activity, FileText, 
+  PhoneForwarded, X, Zap, Sparkles, ExternalLink, Check, PhoneCall
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { collection, onSnapshot, query, where, doc, setDoc, addDoc, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, where, doc, setDoc, addDoc, updateDoc, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 // Interfaces
@@ -43,13 +45,47 @@ const MOCK_MESSAGES: Message[] = [
   { id: 'm-5', conversationId: 'conv-1', sender: 'SYSTEM', text: 'Atendimento transferido da fila: Triage_Bot para: Suporte_N1', time: '10:45', createdAt: Date.now() - 10000 },
 ];
 
+const QUICK_MACROS = [
+  { 
+    label: 'Boleto & PIX', 
+    text: 'Olá! Segue sua chave PIX Copia e Cola para quitação imediata da fatura: 00020126580014br.gov.bcb.pix0136octo8-telecom-fibra-financeiro. O sinal é reestabelecido automaticamente em até 10 minutos após a confirmação bancária.' 
+  },
+  { 
+    label: 'Reboot da ONU/ONT', 
+    text: 'Por favor, retire a fonte da tomada da ONU/ONT por 30 segundos e ligue novamente. Aguarde 2 minutos até que os LEDs PON e LAN fiquem na cor verde fixa e me informe.' 
+  },
+  { 
+    label: 'Incidente Massivo', 
+    text: 'Nossos sistemas registraram rompimento de fibra óptica afetando sua região. As equipes de campo já estão executando as fusões no anel óptico. Previsão de normalização: 40 minutos.' 
+  },
+  { 
+    label: 'Agendamento Técnico', 
+    text: 'Ordem de serviço aberta com sucesso sob o protocolo 20260905981. Nosso técnico certificado comparecerá na janela acordada munido de equipamentos para certificação óptica.' 
+  },
+  { 
+    label: 'Upgrade 1 Giga Mesh', 
+    text: 'Identificamos viabilidade de upgrade para o plano de 1 Giga com 2 módulos Wi-Fi 6 Mesh na sua residência por apenas +R$ 39,90/mês. Gostaria de confirmar a ativação?' 
+  },
+];
+
 export default function Omnichannel() {
+  const navigate = useNavigate();
   const [activeConv, setActiveConv] = useState('conv-1');
   const [inputMsg, setInputMsg] = useState('');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [aiInsight, setAiInsight] = useState<{summary: string, sentiment: string, suggestion: string} | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
+
+  // Search & Filter
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Modals & Macros State
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [selectedQueue, setSelectedQueue] = useState('Suporte FTTH N2 (Redes)');
+  const [isResolveModalOpen, setIsResolveModalOpen] = useState(false);
+  const [resolveReason, setResolveReason] = useState('Dúvida Sanada / Suporte Concluído');
+  const [showMacros, setShowMacros] = useState(false);
 
   // Firestore Subscription: Conversations
   useEffect(() => {
@@ -139,6 +175,56 @@ export default function Omnichannel() {
     }
   };
 
+  const handleTransferConversation = async () => {
+    if (!activeConv) return;
+    const sysMsg: Message = {
+      id: `msg-${Date.now()}`,
+      conversationId: activeConv,
+      sender: 'SYSTEM',
+      text: `Atendimento transferido por Operador para a fila: ${selectedQueue}`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      createdAt: Date.now()
+    };
+    setMessages(prev => [...prev, sysMsg]);
+    setConversations(prev => prev.map(c => c.id === activeConv ? { ...c, preview: `Transferido: ${selectedQueue}` } : c));
+    try {
+      await addDoc(collection(db, 'messages'), sysMsg);
+      await updateDoc(doc(db, 'conversations', activeConv), { preview: `Transferido: ${selectedQueue}` });
+    } catch (e) {
+      console.warn("Transfer doc update skipped:", e);
+    }
+    setIsTransferModalOpen(false);
+  };
+
+  const handleResolveConversation = async () => {
+    if (!activeConv) return;
+    const sysMsg: Message = {
+      id: `msg-${Date.now()}`,
+      conversationId: activeConv,
+      sender: 'SYSTEM',
+      text: `Atendimento encerrado pelo Operador. Desfecho: ${resolveReason}`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      createdAt: Date.now()
+    };
+    setMessages(prev => [...prev, sysMsg]);
+    setConversations(prev => prev.map(c => c.id === activeConv ? { ...c, status: 'RESOLVED', unread: 0, preview: `Resolvido: ${resolveReason}` } : c));
+    try {
+      await addDoc(collection(db, 'messages'), sysMsg);
+      await updateDoc(doc(db, 'conversations', activeConv), { status: 'RESOLVED', preview: `Resolvido: ${resolveReason}`, unread: 0 });
+    } catch (e) {
+      console.warn("Resolve doc update skipped:", e);
+    }
+    setIsResolveModalOpen(false);
+  };
+
+  const filteredConversations = conversations.filter(c => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    return c.name.toLowerCase().includes(term) || 
+           c.channel.toLowerCase().includes(term) || 
+           c.preview.toLowerCase().includes(term);
+  });
+
   const handleGenerateInsight = async () => {
     if (messages.length === 0) return;
     setIsAiLoading(true);
@@ -179,55 +265,63 @@ export default function Omnichannel() {
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input 
               type="text" 
-              placeholder="Buscar conversas..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar por nome, canal..." 
               className="w-full pl-9 pr-4 py-2 bg-slate-100 border-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 rounded-lg text-sm transition-all outline-none"
             />
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {conversations.map(conv => (
-            <div 
-              key={conv.id}
-              onClick={() => setActiveConv(conv.id)}
-              className={cn(
-                "p-4 border-b border-slate-100 cursor-pointer transition-colors relative",
-                activeConv === conv.id ? "bg-blue-50/50" : "hover:bg-white bg-transparent"
-              )}
-            >
-              {activeConv === conv.id && <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600"></div>}
-              
-              <div className="flex justify-between items-start mb-1">
-                <h3 className="font-semibold text-slate-900 text-sm">{conv.name}</h3>
-                <span className="text-[10px] font-medium text-slate-400">{conv.time}</span>
-              </div>
-              
-              <div className="flex items-center gap-1.5 mb-2">
-                <span className={cn(
-                  "text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded",
-                  conv.channel === 'WhatsApp' ? "bg-emerald-100 text-emerald-700" :
-                  conv.channel === 'Instagram' ? "bg-purple-100 text-purple-700" :
-                  "bg-blue-100 text-blue-700"
-                )}>
-                  {conv.channel}
-                </span>
-                {conv.status === 'WAITING' && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 flex items-center gap-1">
-                    <Clock className="w-3 h-3" /> Fila
-                  </span>
-                )}
-              </div>
-
-              <div className="flex justify-between items-center">
-                <p className="text-xs text-slate-500 truncate pr-4">{conv.preview}</p>
-                {conv.unread > 0 && (
-                  <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
-                    {conv.unread}
-                  </span>
-                )}
-              </div>
+          {filteredConversations.length === 0 ? (
+            <div className="p-6 text-center text-slate-400 text-xs font-medium">
+              Nenhuma conversa encontrada
             </div>
-          ))}
+          ) : (
+            filteredConversations.map(conv => (
+              <div 
+                key={conv.id}
+                onClick={() => setActiveConv(conv.id)}
+                className={cn(
+                  "p-4 border-b border-slate-100 cursor-pointer transition-colors relative",
+                  activeConv === conv.id ? "bg-blue-50/50" : "hover:bg-white bg-transparent"
+                )}
+              >
+                {activeConv === conv.id && <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600"></div>}
+                
+                <div className="flex justify-between items-start mb-1">
+                  <h3 className="font-semibold text-slate-900 text-sm">{conv.name}</h3>
+                  <span className="text-[10px] font-medium text-slate-400">{conv.time}</span>
+                </div>
+                
+                <div className="flex items-center gap-1.5 mb-2">
+                  <span className={cn(
+                    "text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded",
+                    conv.channel === 'WhatsApp' ? "bg-emerald-100 text-emerald-700" :
+                    conv.channel === 'Instagram' ? "bg-purple-100 text-purple-700" :
+                    "bg-blue-100 text-blue-700"
+                  )}>
+                    {conv.channel}
+                  </span>
+                  {conv.status === 'WAITING' && (
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> Fila
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <p className="text-xs text-slate-500 truncate pr-4">{conv.preview}</p>
+                  {conv.unread > 0 && (
+                    <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+                      {conv.unread}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
@@ -247,11 +341,18 @@ export default function Omnichannel() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Transferir">
-               <PhoneForwarded className="w-5 h-5" />
+            <button 
+              onClick={() => setIsTransferModalOpen(true)}
+              className="px-3 py-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 border border-slate-200 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-semibold" 
+              title="Transferir atendimento para outra fila ou setor"
+            >
+               <PhoneForwarded className="w-3.5 h-3.5" /> Transferir
             </button>
-            <button className="px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4" /> Resolver
+            <button 
+              onClick={() => setIsResolveModalOpen(true)}
+              className="px-3.5 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> Resolver
             </button>
           </div>
         </div>
@@ -270,8 +371,8 @@ export default function Omnichannel() {
             )}>
               
               {msg.sender === 'SYSTEM' ? (
-                <div className="bg-slate-200/60 text-slate-500 text-xs font-medium px-4 py-1.5 rounded-full flex items-center gap-2">
-                  <Activity className="w-3.5 h-3.5" />
+                <div className="bg-slate-200/80 text-slate-600 text-xs font-medium px-4 py-1.5 rounded-full flex items-center gap-2 shadow-2xs border border-slate-300/60">
+                  <Activity className="w-3.5 h-3.5 text-slate-500" />
                   {msg.text}
                 </div>
               ) : (
@@ -300,10 +401,50 @@ export default function Omnichannel() {
           ))}
         </div>
 
+        {/* Quick Macros Drawer */}
+        {showMacros && (
+          <div className="p-3 bg-amber-50/90 border-t border-amber-200 flex items-center gap-2 overflow-x-auto">
+            <span className="text-xs font-bold text-amber-900 flex items-center gap-1 shrink-0">
+              <Zap className="w-3.5 h-3.5 text-amber-600" /> Respostas Rápidas:
+            </span>
+            {QUICK_MACROS.map((macro, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => {
+                  setInputMsg(macro.text);
+                  setShowMacros(false);
+                }}
+                className="px-2.5 py-1 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-medium shrink-0 transition-colors shadow-2xs"
+              >
+                {macro.label}
+              </button>
+            ))}
+            <button 
+              type="button"
+              onClick={() => setShowMacros(false)} 
+              className="p-1 hover:bg-amber-200 text-amber-700 rounded-md shrink-0 ml-auto"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* Chat Input */}
         <div className="p-4 bg-white border-t border-slate-200">
+          <div className="flex items-center justify-between mb-2">
+            <button
+              type="button"
+              onClick={() => setShowMacros(!showMacros)}
+              className="flex items-center gap-1 px-2.5 py-1 text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-md transition-colors"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-600" /> Modelos Rápidos (/atalhos)
+            </button>
+            <span className="text-[11px] text-slate-400 font-medium">Pressione Enter para enviar</span>
+          </div>
+
           <div className="flex items-end gap-2 bg-slate-50 border border-slate-200 rounded-xl p-2 focus-within:ring-2 focus-within:ring-blue-200 focus-within:border-blue-500 transition-all">
-            <button className="p-2 text-slate-400 hover:text-slate-600 transition-colors"><Paperclip className="w-5 h-5" /></button>
+            <button className="p-2 text-slate-400 hover:text-slate-600 transition-colors" title="Anexar comprovante ou foto de sinal"><Paperclip className="w-5 h-5" /></button>
             <textarea 
               value={inputMsg}
               onChange={(e) => setInputMsg(e.target.value)}
@@ -313,16 +454,16 @@ export default function Omnichannel() {
                   handleSendMessage();
                 }
               }}
-              placeholder="Digite sua mensagem (use / para atalhos)..."
+              placeholder="Digite sua mensagem para o assinante..."
               className="flex-1 bg-transparent border-none resize-none max-h-32 min-h-[44px] py-3 text-sm focus:ring-0 outline-none placeholder:text-slate-400"
               rows={1}
             />
             <div className="flex gap-1 pb-1 pr-1">
-              <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors"><Mic className="w-5 h-5" /></button>
+              <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors" title="Gravar áudio"><Mic className="w-5 h-5" /></button>
               <button 
                 onClick={handleSendMessage}
                 disabled={!inputMsg.trim()}
-                className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
               >
                 <Send className="w-5 h-5" />
               </button>
@@ -334,16 +475,39 @@ export default function Omnichannel() {
       {/* 3. Right Sidebar: Customer Info & Copilot */}
       <div className="w-80 flex-shrink-0 bg-white flex flex-col">
         {/* Customer Mini Profile */}
-        <div className="p-6 border-b border-slate-200 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center text-2xl font-bold mx-auto mb-3">
+        <div className="p-5 border-b border-slate-200 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center text-xl font-bold mx-auto mb-2 shadow-2xs">
             {conversations.find(c => c.id === activeConv)?.name.charAt(0) || 'C'}
           </div>
           <h3 className="font-bold text-slate-900">{conversations.find(c => c.id === activeConv)?.name || 'Carregando...'}</h3>
-          <p className="text-xs font-medium text-slate-500 mt-1">Cliente desde Jan/2024</p>
+          <p className="text-xs font-medium text-slate-500 mt-0.5">Assinante Fibra FTTH</p>
           
-          <div className="flex justify-center gap-2 mt-4">
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 bg-slate-100 text-slate-600 rounded border border-slate-200">VIP</span>
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 bg-slate-100 text-slate-600 rounded border border-slate-200">FTTH</span>
+          <div className="flex justify-center gap-1.5 mt-3">
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-blue-50 text-blue-700 rounded border border-blue-200">GPON Ativo</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded border border-emerald-200">Em Dia</span>
+          </div>
+
+          {/* Direct Actions to Telecom & CRM */}
+          <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2">
+            <button 
+              onClick={() => {
+                const currentName = conversations.find(c => c.id === activeConv)?.name;
+                if (currentName) {
+                  navigate(`/customers?search=${encodeURIComponent(currentName)}`);
+                } else {
+                  navigate('/customers');
+                }
+              }}
+              className="py-1.5 px-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1"
+            >
+              <ExternalLink className="w-3.5 h-3.5" /> Ficha 360°
+            </button>
+            <button 
+              onClick={() => navigate('/telephony')}
+              className="py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1"
+            >
+              <PhoneCall className="w-3.5 h-3.5" /> Ligar VoIP
+            </button>
           </div>
         </div>
 
@@ -425,6 +589,154 @@ export default function Omnichannel() {
           </div>
         </div>
       </div>
+
+      {/* Transfer Modal */}
+      {isTransferModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
+                  <PhoneForwarded className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Transferir Atendimento</h3>
+                  <p className="text-xs text-slate-500">Selecione o setor de destino para transferir</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsTransferModalOpen(false)}
+                className="p-1.5 hover:bg-slate-200 text-slate-400 hover:text-slate-600 rounded-lg transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                Fila de Atendimento ou Setor
+              </label>
+              {[
+                { id: 'Suporte FTTH N2 (Redes)', desc: 'Problemas de sinal óptico, OLT, lentidão e Wi-Fi avançado' },
+                { id: 'Comercial & Upgrades', desc: 'Migração para 1 Giga, planos móveis e novas contratações' },
+                { id: 'Financeiro & Cobrança', desc: 'Negociação de débitos, comprovantes e desbloqueio em confiança' },
+                { id: 'Bot Triagem IA (N1)', desc: 'Devolver para fluxo de autoatendimento inteligente' }
+              ].map(queue => (
+                <label 
+                  key={queue.id}
+                  onClick={() => setSelectedQueue(queue.id)}
+                  className={cn(
+                    "flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all",
+                    selectedQueue === queue.id 
+                      ? "border-blue-600 bg-blue-50/50 shadow-2xs" 
+                      : "border-slate-200 hover:bg-slate-50"
+                  )}
+                >
+                  <input 
+                    type="radio" 
+                    name="queue" 
+                    checked={selectedQueue === queue.id}
+                    onChange={() => setSelectedQueue(queue.id)}
+                    className="mt-0.5 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-slate-800">{queue.id}</div>
+                    <div className="text-xs text-slate-500 mt-0.5">{queue.desc}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+              <button 
+                onClick={() => setIsTransferModalOpen(false)}
+                className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-lg text-xs font-bold transition-colors"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleTransferConversation}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5"
+              >
+                <Check className="w-4 h-4" /> Confirmar Transferência
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resolve Modal */}
+      {isResolveModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Finalizar Atendimento</h3>
+                  <p className="text-xs text-slate-500">Selecione o motivo da resolução (FCR)</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsResolveModalOpen(false)}
+                className="p-1.5 hover:bg-slate-200 text-slate-400 hover:text-slate-600 rounded-lg transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-2.5">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                Motivo / Tabulação de Encerramento
+              </label>
+              {[
+                'Dúvida Sanada / Suporte Concluído',
+                'Segunda Via de Boleto / PIX Enviado',
+                'Visita Técnica Agendada com Sucesso',
+                'Upgrade de Plano Fechado',
+                'Sem Retorno do Assinante'
+              ].map(reason => (
+                <label 
+                  key={reason}
+                  onClick={() => setResolveReason(reason)}
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all",
+                    resolveReason === reason 
+                      ? "border-emerald-600 bg-emerald-50/50 shadow-2xs" 
+                      : "border-slate-200 hover:bg-slate-50"
+                  )}
+                >
+                  <input 
+                    type="radio" 
+                    name="resolveReason" 
+                    checked={resolveReason === reason}
+                    onChange={() => setResolveReason(reason)}
+                    className="text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-sm font-semibold text-slate-800">{reason}</span>
+                </label>
+              ))}
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-2">
+              <button 
+                onClick={() => setIsResolveModalOpen(false)}
+                className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-lg text-xs font-bold transition-colors"
+              >
+                Voltar
+              </button>
+              <button 
+                onClick={handleResolveConversation}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5"
+              >
+                <Check className="w-4 h-4" /> Concluir e Resolver
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

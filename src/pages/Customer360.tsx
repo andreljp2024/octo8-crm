@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { collection, onSnapshot, query, setDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 // Interfaces
 export interface Customer {
@@ -235,6 +235,7 @@ const MOCK_CUSTOMERS: Customer[] = [
 
 export default function Customer360() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { tenantId } = useAuth();
 
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -245,6 +246,17 @@ export default function Customer360() {
   // Customer 360 Drawer State
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [activeCustomerTab, setActiveCustomerTab] = useState<'FTTH' | 'FINANCIAL' | 'TICKETS' | 'DETAILS'>('FTTH');
+
+  // Handle URL query params for deep linking
+  useEffect(() => {
+    const custId = searchParams.get('id');
+    const searchVal = searchParams.get('search');
+    if (searchVal) setSearchQuery(searchVal);
+    if (custId && customers.length > 0) {
+      const match = customers.find(c => c.id === custId);
+      if (match) setSelectedCustomer(match);
+    }
+  }, [searchParams, customers]);
 
   // Interactive Action Feedback
   const [pingRunning, setPingRunning] = useState(false);
