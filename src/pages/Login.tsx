@@ -1,13 +1,27 @@
-import React, { useState } from 'react';
-import { AlertCircle, Bot } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { AlertCircle, Bot, ExternalLink } from 'lucide-react';
 import { auth } from '@/lib/firebase';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isInIframe, setIsInIframe] = useState(false);
+
+  useEffect(() => {
+    try {
+      setIsInIframe(window !== window.parent);
+    } catch (e) {
+      setIsInIframe(true);
+    }
+  }, []);
 
   const handleGoogleLogin = async () => {
+    if (isInIframe) {
+      setError('O login com Google é bloqueado por políticas de segurança dentro de visualizações de iframe (Cross-Origin-Opener-Policy). Por favor, abra o aplicativo em uma Nova Aba para fazer o login.');
+      return;
+    }
+
     setError('');
     setLoading(true);
     const provider = new GoogleAuthProvider();
@@ -52,6 +66,13 @@ export default function Login() {
             <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm flex items-start gap-2 mb-6 text-left">
               <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {isInIframe && !error && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-lg text-sm flex items-start gap-2 mb-6 text-left">
+              <ExternalLink className="w-5 h-5 shrink-0 mt-0.5" />
+              <span>Para fazer login com o Google, você precisa abrir o app em uma <b>Nova Aba</b>. Use o botão de seta no canto superior direito do Preview.</span>
             </div>
           )}
 
