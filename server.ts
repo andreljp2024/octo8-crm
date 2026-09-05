@@ -73,6 +73,44 @@ async function startServer() {
     }
   });
 
+  // Gemini Copilot Customer Insight endpoint
+  app.post('/api/copilot/customer-insight', async (req, res) => {
+    if (!ai) {
+      return res.status(500).json({ error: 'GEMINI_API_KEY not configured' });
+    }
+
+    try {
+      const { context } = req.body;
+      if (!context) {
+        return res.status(400).json({ error: 'Context is required' });
+      }
+
+      const prompt = `
+      Atue como um analista de Customer Success sênior. Eu vou te passar uma lista de clientes extraída do meu CRM, contendo o nome, status, segmento, saúde da conta (Health Score de 0 a 100) e MRR (Receita Mensal Recorrente).
+      
+      Sua tarefa é ler essa lista e gerar um **Resumo Executivo da Carteira** em exatamente 1 parágrafo claro, direto e focado em ação. Não inclua saudações nem listas. Apenas o texto corrido.
+      
+      Instruções específicas:
+      1. Identifique e cite pelo nome os clientes com Health Score crítico (abaixo de 50) que representam risco de churn.
+      2. Aponte oportunidades ou onde a atenção deve ser focada.
+      3. Seja profissional e direto.
+
+      Lista de Clientes:
+      ${context}
+      `;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+      });
+
+      res.json({ summary: response.text });
+    } catch (error) {
+      console.error('Gemini error:', error);
+      res.status(500).json({ error: 'Erro ao gerar insight com IA' });
+    }
+  });
+
   // Vite middleware para desenvolvimento
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
