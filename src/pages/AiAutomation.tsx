@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Bot, Settings, Play, CheckCircle2, AlertTriangle, 
   Plus, MoreVertical, Cpu, MessageSquare, Zap, X,
   Send, Sparkles, Sliders, Shield, BookOpen, Trash2, Edit3, ArrowRight, RefreshCw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { collection, onSnapshot, query, setDoc, doc, updateDoc, deleteDoc, orderBy } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 export interface Agent {
   id: string;
@@ -84,7 +86,7 @@ const TEMPLATES = [
 ];
 
 export default function AiAutomation() {
-  const [agents, setAgents] = useState<Agent[]>(DEFAULT_AGENTS);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [ragEnabled, setRagEnabled] = useState(true);
   const [autoHandoff, setAutoHandoff] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -103,6 +105,34 @@ export default function AiAutomation() {
   const [formPrompt, setFormPrompt] = useState('');
   const [formTemperature, setFormTemperature] = useState(0.4);
   const [formKnowledge, setFormKnowledge] = useState(true);
+
+  // Firestore Subscription
+  useEffect(() => {
+    const q = query(collection(db, 'ai_agents'));
+    
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      if (snapshot.empty && agents.length === 0) {
+        // Seed initial agents to Firestore if empty
+        DEFAULT_AGENTS.forEach(async (agent) => {
+          try {
+            await setDoc(doc(db, 'ai_agents', agent.id), agent);
+          } catch (e) {
+            console.warn("Could not seed AI Agent:", e);
+          }
+        });
+        setAgents(DEFAULT_AGENTS);
+      } else {
+        const docsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Agent));
+        // Sort explicitly if needed, here just raw data
+        setAgents(docsData.sort((a,b) => b.interactions - a.interactions));
+      }
+    }, (error) => {
+      console.warn("Firestore listener error, using fallback agents:", error);
+      setAgents(DEFAULT_AGENTS);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const openCreateModal = () => {
     setEditingAgent(null);
@@ -126,13 +156,13 @@ export default function AiAutomation() {
     setIsModalOpen(true);
   };
 
-  const handleSaveAgent = (e: React.FormEvent) => {
+  const handleSaveAgent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) return;
 
     if (editingAgent) {
-      setAgents(prev => prev.map(a => a.id === editingAgent.id ? {
-        ...a,
+      const updated: Agent = {
+        ...editingAgent,
         name: formName,
         type: formType,
         model: formModel,
@@ -140,7 +170,14 @@ export default function AiAutomation() {
         temperature: formTemperature,
         knowledgeBaseLinked: formKnowledge,
         lastTrained: 'Recém-atualizado'
-      } : a));
+      };
+      setAgents(prev => prev.map(a => a.id === updated.id ? updated : a));
+      
+      try {
+        await updateDoc(doc(db, 'ai_agents', updated.id), { ...updated });
+      } catch (err) {
+        console.warn("Could not update agent in Firestore:", err);
+      }
     } else {
       const newAgent: Agent = {
         id: `bot-${Date.now()}`,
@@ -156,25 +193,41 @@ export default function AiAutomation() {
         lastTrained: 'Recém-criado'
       };
       setAgents(prev => [newAgent, ...prev]);
+
+      try {
+        await setDoc(doc(db, 'ai_agents', newAgent.id), newAgent);
+      } catch (err) {
+        console.warn("Could not save new agent to Firestore:", err);
+      }
     }
     setIsModalOpen(false);
   };
 
-  const handleToggleStatus = (id: string) => {
-    setAgents(prev => prev.map(a => {
-      if (a.id === id) {
-        const nextStatus = a.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
-        return { ...a, status: nextStatus };
-      }
-      return a;
-    }));
+  const handleToggleStatus = async (id: string) => {
+    const agent = agents.find(a => a.id === id);
+    if (!agent) return;
+    
+    const nextStatus = agent.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
+    setAgents(prev => prev.map(a => a.id === id ? { ...a, status: nextStatus } : a));
+    
+    try {
+      await updateDoc(doc(db, 'ai_agents', id), { status: nextStatus });
+    } catch (err) {
+      console.warn("Could not update agent status in Firestore:", err);
+    }
   };
 
-  const handleDeleteAgent = (id: string) => {
+  const handleDeleteAgent = async (id: string) => {
     if (confirm('Tem certeza que deseja excluir este agente de IA?')) {
       setAgents(prev => prev.filter(a => a.id !== id));
       if (activePlaygroundAgent?.id === id) {
         setActivePlaygroundAgent(null);
+      }
+      
+      try {
+        await deleteDoc(doc(db, 'ai_agents', id));
+      } catch (err) {
+        console.warn("Could not delete agent from Firestore:", err);
       }
     }
   };
@@ -200,7 +253,7 @@ export default function AiAutomation() {
     setIsChatLoading(true);
 
     try {
-      const res = await fetch('/api/copilot/agent-chat', {
+      const res = await fetch('/api/copilot/test-agent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

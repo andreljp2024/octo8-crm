@@ -194,6 +194,45 @@ Responda de forma concisa, educada e direta ao ponto, como se estivesse no chat 
     }
   });
 
+  // Gemini AI Automation Test Agent endpoint
+  app.post('/api/copilot/test-agent', async (req, res) => {
+    const fallbackReply = "Desculpe, não consegui conectar à inteligência artificial no momento. Verifique a chave de API.";
+
+    if (!ai) {
+      return res.json({ reply: fallbackReply });
+    }
+
+    try {
+      const { systemPrompt, message, history = [] } = req.body;
+      if (!systemPrompt || !message) {
+        return res.status(400).json({ error: 'systemPrompt and message are required' });
+      }
+
+      // Convert history to genai SDK format
+      const formattedHistory = history.map((h: any) => ({
+        role: h.role === 'user' ? 'user' : 'model',
+        parts: [{ text: h.text }]
+      }));
+
+      const chat = ai.chats.create({
+        model: 'gemini-2.5-flash',
+        config: {
+          systemInstruction: systemPrompt,
+          temperature: 0.5,
+        },
+        history: formattedHistory
+      });
+
+      const response = await chat.sendMessage({ message });
+      const reply = response.text || "Desculpe, sem resposta gerada.";
+      
+      res.json({ reply });
+    } catch (error) {
+      console.error('Gemini test agent error:', error);
+      res.json({ reply: "Houve um erro de comunicação com o modelo LLM configurado." });
+    }
+  });
+
   // Vite middleware para desenvolvimento
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
