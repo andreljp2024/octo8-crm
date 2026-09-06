@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   BarChart3, Calendar, Download, Filter, 
   TrendingUp, CheckCircle2, Clock, Users, Activity,
-  Bot, PhoneCall, ArrowUpRight, ArrowDownRight, Award
+  Bot, PhoneCall, ArrowUpRight, ArrowDownRight, Award,
+  PieChart as PieChartIcon, Search, Headphones, MessageSquare,
+  Sparkles, Wifi, ShieldAlert, Check, HelpCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell } from 'recharts';
 
 // Data for different timeframes
 const TIMEFRAME_DATA = {
@@ -70,19 +73,36 @@ const MOCK_SLA_DATA = [
   { name: 'Financeiro', sla: 92, target: 90 },
 ];
 
+const MOCK_CONTACT_REASONS = [
+  { name: 'Lentidão & Roteador Wi-Fi', value: 485, percentage: 39, color: '#3b82f6', category: 'Suporte FTTH' },
+  { name: '2ª Via de Boleto & PIX', value: 320, percentage: 26, color: '#10b981', category: 'Financeiro' },
+  { name: 'LOS Vermelho (Rompimento Fibra)', value: 224, percentage: 18, color: '#ef4444', category: 'Suporte FTTH' },
+  { name: 'Upgrade para 1 Giga com Mesh', value: 148, percentage: 12, color: '#8b5cf6', category: 'Vendas' },
+  { name: 'Mudança de Endereço / Outros', value: 68, percentage: 5, color: '#64748b', category: 'Atendimento' },
+];
+
 const MOCK_AGENTS_PERFORMANCE = [
-  { id: '1', name: 'Juliana Ferreira', role: 'Humano (Suporte N2)', calls: 64, tma: '03:45', tme: '00:52', csat: 4.8, fcr: '91%' },
-  { id: '2', name: 'Bot Suporte N1 (IA)', role: 'Agente IA (Gemini)', calls: 412, tma: '01:10', tme: '00:02', csat: 4.6, fcr: '78%' },
-  { id: '3', name: 'Carlos Eduardo', role: 'Humano (Vendas Fibra)', calls: 52, tma: '06:15', tme: '01:20', csat: 4.9, fcr: '86%' },
-  { id: '4', name: 'Mariana Lima', role: 'Humano (Retenção)', calls: 48, tma: '08:30', tme: '01:45', csat: 4.4, fcr: '74%' },
-  { id: '5', name: 'Bot Qualificador (IA)', role: 'Agente IA (Gemini)', calls: 198, tma: '01:25', tme: '00:01', csat: 4.7, fcr: '92%' },
+  { id: '1', name: 'Juliana Ferreira', role: 'Humano (Suporte N2)', queue: 'Suporte FTTH', calls: 64, tma: '03:45', tme: '00:52', csat: 4.8, fcr: '91%', ext: '401' },
+  { id: '2', name: 'Bot Suporte N1 (IA)', role: 'Agente IA (Gemini)', queue: 'Suporte FTTH', calls: 412, tma: '01:10', tme: '00:02', csat: 4.6, fcr: '78%', ext: '801' },
+  { id: '3', name: 'Carlos Eduardo', role: 'Humano (Vendas Fibra)', queue: 'Vendas Inbound', calls: 52, tma: '06:15', tme: '01:20', csat: 4.9, fcr: '86%', ext: '402' },
+  { id: '4', name: 'Mariana Lima', role: 'Humano (Retenção)', queue: 'Retenção', calls: 48, tma: '08:30', tme: '01:45', csat: 4.4, fcr: '74%', ext: '403' },
+  { id: '5', name: 'Bot Qualificador (IA)', role: 'Agente IA (Gemini)', queue: 'Vendas Inbound', calls: 198, tma: '01:25', tme: '00:01', csat: 4.7, fcr: '92%', ext: '802' },
 ];
 
 export default function Reports() {
+  const navigate = useNavigate();
   const [timeframe, setTimeframe] = useState<'today' | '7d' | '30d'>('today');
-  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'SLA' | 'AGENTS'>('OVERVIEW');
+  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'SLA' | 'AGENTS' | 'REASONS'>('OVERVIEW');
+  const [agentSearch, setAgentSearch] = useState('');
+  const [exportFeedback, setExportFeedback] = useState(false);
 
   const currentData = TIMEFRAME_DATA[timeframe];
+
+  const filteredAgents = MOCK_AGENTS_PERFORMANCE.filter(a => 
+    a.name.toLowerCase().includes(agentSearch.toLowerCase()) ||
+    a.role.toLowerCase().includes(agentSearch.toLowerCase()) ||
+    a.queue.toLowerCase().includes(agentSearch.toLowerCase())
+  );
 
   const handleExportCDR = () => {
     // Generate real CDR CSV file
@@ -104,6 +124,9 @@ export default function Reports() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+
+    setExportFeedback(true);
+    setTimeout(() => setExportFeedback(false), 3000);
   };
 
   return (
@@ -144,9 +167,13 @@ export default function Reports() {
           {/* Export CDR Button */}
           <button 
             onClick={handleExportCDR}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95"
+            className={cn(
+              "px-3.5 py-2 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 active:scale-95",
+              exportFeedback ? "bg-emerald-600 text-white" : "bg-blue-600 hover:bg-blue-700 text-white"
+            )}
           >
-            <Download className="w-4 h-4" /> Exportar CDR (CSV)
+            {exportFeedback ? <Check className="w-4 h-4" /> : <Download className="w-4 h-4" />}
+            {exportFeedback ? 'Exportado!' : 'Exportar CDR (CSV)'}
           </button>
         </div>
       </div>
@@ -212,6 +239,15 @@ export default function Reports() {
           )}
         >
           <Users className="w-4 h-4" /> Performance de Atendentes & IA
+        </button>
+        <button 
+          onClick={() => setActiveTab('REASONS')}
+          className={cn(
+            "px-5 py-3 text-xs font-bold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap",
+            activeTab === 'REASONS' ? "border-blue-600 text-blue-700 bg-slate-50/80 rounded-t-lg" : "border-transparent text-slate-500 hover:text-slate-700"
+          )}
+        >
+          <PieChartIcon className="w-4 h-4" /> Motivos de Contato & Diagnóstico FTTH
         </button>
       </div>
 
@@ -289,9 +325,21 @@ export default function Reports() {
 
         {activeTab === 'AGENTS' && (
           <div className="space-y-4">
-            <div>
-              <h3 className="font-bold text-slate-900 text-sm">Quadro de Produtividade dos Agentes & Bots</h3>
-              <p className="text-xs text-slate-500">Acompanhamento individual de TMA, TME, volume de atendimento e avaliação CSAT</p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Quadro de Produtividade dos Agentes & Bots</h3>
+                <p className="text-xs text-slate-500">Acompanhamento individual de TMA, TME, volume de atendimento e avaliação CSAT</p>
+              </div>
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input 
+                  type="text" 
+                  value={agentSearch} 
+                  onChange={(e) => setAgentSearch(e.target.value)} 
+                  placeholder="Buscar agente ou fila..."
+                  className="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs outline-none focus:bg-white focus:border-blue-500"
+                />
+              </div>
             </div>
 
             <div className="border border-slate-200 rounded-xl overflow-hidden">
@@ -299,43 +347,162 @@ export default function Reports() {
                 <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
                   <tr>
                     <th className="p-3">Atendente / Bot</th>
-                    <th className="p-3">Perfil</th>
+                    <th className="p-3">Fila / Perfil</th>
                     <th className="p-3 text-center">Atendimentos</th>
                     <th className="p-3 text-center">TMA</th>
                     <th className="p-3 text-center">TME</th>
-                    <th className="p-3 text-center">CSAT (0-5)</th>
-                    <th className="p-3 text-center">FCR (1º Contato)</th>
+                    <th className="p-3 text-center">CSAT</th>
+                    <th className="p-3 text-center">FCR</th>
+                    <th className="p-3 text-right">Ação</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
-                  {MOCK_AGENTS_PERFORMANCE.map(ag => (
-                    <tr key={ag.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="p-3 font-bold text-slate-900 flex items-center gap-2">
-                        {ag.role.includes('IA') ? (
-                          <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                            <Bot className="w-4 h-4" />
-                          </div>
-                        ) : (
-                          <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
-                            {ag.name.substring(0, 2).toUpperCase()}
-                          </div>
-                        )}
-                        <span>{ag.name}</span>
-                      </td>
-                      <td className="p-3 text-slate-500">{ag.role}</td>
-                      <td className="p-3 text-center font-bold text-slate-800">{ag.calls}</td>
-                      <td className="p-3 text-center font-mono text-slate-600">{ag.tma}</td>
-                      <td className="p-3 text-center font-mono text-slate-600">{ag.tme}</td>
-                      <td className="p-3 text-center">
-                        <span className="inline-flex items-center gap-1 font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                          ★ {ag.csat}
-                        </span>
-                      </td>
-                      <td className="p-3 text-center font-bold text-emerald-600">{ag.fcr}</td>
+                  {filteredAgents.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-6 text-center text-slate-400">Nenhum atendente encontrado</td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredAgents.map(ag => (
+                      <tr key={ag.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-3 font-bold text-slate-900 flex items-center gap-2">
+                          {ag.role.includes('IA') ? (
+                            <div className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                              <Bot className="w-4 h-4" />
+                            </div>
+                          ) : (
+                            <div className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-[11px]">
+                              {ag.name.substring(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <p>{ag.name}</p>
+                            <p className="text-[10px] text-slate-400 font-mono">Ramal: {ag.ext}</p>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <span className="text-slate-700 block">{ag.queue}</span>
+                          <span className="text-[10px] text-slate-400">{ag.role}</span>
+                        </td>
+                        <td className="p-3 text-center font-bold text-slate-800">{ag.calls}</td>
+                        <td className="p-3 text-center font-mono text-slate-600">{ag.tma}</td>
+                        <td className="p-3 text-center font-mono text-slate-600">{ag.tme}</td>
+                        <td className="p-3 text-center">
+                          <span className="inline-flex items-center gap-1 font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-[11px]">
+                            ★ {ag.csat}
+                          </span>
+                        </td>
+                        <td className="p-3 text-center font-bold text-emerald-600">{ag.fcr}</td>
+                        <td className="p-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => navigate(`/telephony?dial=${ag.ext}`)}
+                              className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-[11px] font-bold transition-colors"
+                              title="Chamar via WebRTC"
+                            >
+                              Ligar
+                            </button>
+                            <button
+                              onClick={() => navigate('/telephony?tab=QUEUES')}
+                              className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-bold transition-colors"
+                              title="Ver Fila de Atendimento"
+                            >
+                              Fila
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'REASONS' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Top Motivos de Contato & Demandas FTTH</h3>
+                <p className="text-xs text-slate-500">Classificação semântica em tempo real via Gemini RAG em chamadas e mensagens</p>
+              </div>
+              <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-3 py-1 rounded-full flex items-center gap-1.5 w-fit">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-600" /> IA Categorization Ativa
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Donut Chart */}
+              <div className="bg-slate-50/70 border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center">
+                <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Distribuição Percentual</h4>
+                <div className="w-56 h-56">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={MOCK_CONTACT_REASONS}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={80}
+                        paddingAngle={4}
+                        dataKey="value"
+                      >
+                        {MOCK_CONTACT_REASONS.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '11px' }} 
+                        formatter={(val: any) => [`${val} contatos`, 'Volume']}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="text-[11px] text-slate-500 text-center font-medium mt-1">Total de 1.245 interações categorizadas</p>
+              </div>
+
+              {/* Progress Breakdown */}
+              <div className="lg:col-span-2 space-y-3.5">
+                {MOCK_CONTACT_REASONS.map((reason, idx) => (
+                  <div key={idx} className="bg-white border border-slate-200 rounded-xl p-3.5 hover:shadow-2xs transition-shadow">
+                    <div className="flex items-center justify-between text-xs mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: reason.color }} />
+                        <span className="font-bold text-slate-800">{reason.name}</span>
+                        <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-mono">{reason.category}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-500 font-mono text-[11px]">{reason.value} contatos</span>
+                        <span className="font-bold text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">{reason.percentage}%</span>
+                      </div>
+                    </div>
+                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full rounded-full transition-all duration-500" 
+                        style={{ width: `${reason.percentage}%`, backgroundColor: reason.color }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* AI Action Recommendations */}
+            <div className="p-4 bg-gradient-to-r from-blue-50/80 via-indigo-50/60 to-purple-50/80 border border-blue-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <h4 className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-blue-600" /> Otimização Recomendada pelo Gemini Copilot
+                </h4>
+                <p className="text-xs text-blue-700">
+                  39% das chamadas são sobre instabilidade Wi-Fi. Habilitar o teste automático de ONU/Roteador na URA pode reduzir o TMA em até 45%.
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/ai')}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-colors shrink-0 shadow-2xs"
+              >
+                Configurar Agente URA IA
+              </button>
             </div>
           </div>
         )}
