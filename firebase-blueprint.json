@@ -1,0 +1,158 @@
+{
+  "entities": {
+    "kb_article": {
+      "title": "KB Article",
+      "description": "An article in the Knowledge Base used for training the AI or for agent reference.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "title": { "type": "string", "maxLength": 150 },
+        "excerpt": { "type": "string", "maxLength": 300 },
+        "content": { "type": "string", "maxLength": 100000 },
+        "tags": { "type": "array", "items": { "type": "string" }, "maxLength": 10 },
+        "status": { "type": "string", "enum": ["PUBLISHED", "DRAFT"] },
+        "aiSynced": { "type": "boolean" },
+        "lastUpdated": { "type": "string" }
+      },
+      "required": ["categoryId", "title", "excerpt", "content", "status", "aiSynced", "lastUpdated"]
+    },
+    "interaction": {
+      "title": "Queued Interaction",
+      "description": "An interaction in the omnichannel queue.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "tenantId": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "maxLength": 50 },
+        "customerId": { "type": "string", "maxLength": 128 },
+        "skillRequired": { "type": "string", "maxLength": 50 },
+        "priority": { "type": "number" },
+        "enqueueTime": { "type": "number" },
+        "status": { "type": "string", "maxLength": 50 },
+        "assignedAgentId": { "type": "string", "maxLength": 128 },
+        "slaLimitTime": { "type": "number" },
+        "slaStatus": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "tenantId", "type", "customerId", "priority", "enqueueTime", "status", "slaLimitTime", "slaStatus"]
+    },
+    "agent": {
+      "title": "Agent Workforce",
+      "description": "State of an agent in the workforce.",
+      "type": "object",
+      "properties": {
+        "agentId": { "type": "string", "maxLength": 128 },
+        "tenantId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "maxLength": 50 },
+        "skills": { "type": "array", "items": { "type": "string", "maxLength": 50 }, "maxLength": 20 },
+        "currentCapacity": { "type": "number" },
+        "maxCapacity": { "type": "number" },
+        "lastAssignedTime": { "type": "number" }
+      },
+      "required": ["agentId", "tenantId", "status", "skills", "currentCapacity", "maxCapacity", "lastAssignedTime"]
+    },
+    "customer": {
+      "title": "Customer",
+      "description": "A customer of the tenant.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "tenantId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 150 },
+        "document": { "type": "string", "maxLength": 50 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "email": { "type": "string", "maxLength": 150 },
+        "status": { "type": "string", "maxLength": 50 },
+        "whatsappOptIn": { "type": "boolean" },
+        "marketingOptIn": { "type": "boolean" },
+        "aiProcessingOptIn": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "tenantId", "name", "status", "createdAt", "updatedAt"]
+    },
+    "agent_status_log": {
+      "title": "Agent Status Log",
+      "description": "Log of agent status changes for WFM.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "tenantId": { "type": "string", "maxLength": 128 },
+        "agentId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "maxLength": 50 },
+        "reasonCode": { "type": "string", "maxLength": 50 },
+        "startedAt": { "type": "number" },
+        "endedAt": { "type": "number" },
+        "durationSeconds": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "tenantId", "agentId", "status", "startedAt", "createdAt"]
+    },
+    "channel_template": {
+      "title": "Channel Template",
+      "description": "Template for active channels like WhatsApp HSM.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "tenantId": { "type": "string", "maxLength": 128 },
+        "channel": { "type": "string", "maxLength": 50 },
+        "externalId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "category": { "type": "string", "maxLength": 50 },
+        "language": { "type": "string", "maxLength": 20 },
+        "content": { "type": "string", "maxLength": 5000 },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "tenantId", "channel", "name", "status", "createdAt", "updatedAt"]
+    },
+    "ai_feedback_log": {
+      "title": "AI Feedback Log",
+      "description": "Feedback on AI answers for continuous improvement.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "tenantId": { "type": "string", "maxLength": 128 },
+        "interactionId": { "type": "string", "maxLength": 128 },
+        "aiAgentId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "rating": { "type": "string", "enum": ["THUMBS_UP", "THUMBS_DOWN"] },
+        "comment": { "type": "string", "maxLength": 1000 },
+        "correctedContent": { "type": "string", "maxLength": 5000 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "tenantId", "interactionId", "aiAgentId", "rating", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/tenants/{tenantId}/kb_articles/{articleId}": {
+      "schema": { "$ref": "#/entities/kb_article" },
+      "description": "Stores the knowledge base articles for a tenant."
+    },
+    "/tenants/{tenantId}/interactions/{interactionId}": {
+      "schema": { "$ref": "#/entities/interaction" },
+      "description": "Stores the omnichannel interactions for a tenant."
+    },
+    "/tenants/{tenantId}/agents/{agentId}": {
+      "schema": { "$ref": "#/entities/agent" },
+      "description": "Stores the agent states for a tenant."
+    },
+    "/tenants/{tenantId}/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/customer" },
+      "description": "Stores customer records with LGPD opt-ins."
+    },
+    "/tenants/{tenantId}/agent_status_logs/{logId}": {
+      "schema": { "$ref": "#/entities/agent_status_log" },
+      "description": "Logs of agent status changes for WFM."
+    },
+    "/tenants/{tenantId}/channel_templates/{templateId}": {
+      "schema": { "$ref": "#/entities/channel_template" },
+      "description": "Channel templates (HSM) and their approval status."
+    },
+    "/tenants/{tenantId}/ai_feedback_logs/{logId}": {
+      "schema": { "$ref": "#/entities/ai_feedback_log" },
+      "description": "Logs of feedback given on AI responses."
+    }
+  }
+}

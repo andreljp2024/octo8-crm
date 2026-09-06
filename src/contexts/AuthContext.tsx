@@ -13,6 +13,8 @@ export interface AppUser {
   displayName: string | null;
   photoURL?: string | null;
   isDemo?: boolean;
+  role?: string; // e.g. ADMIN, SUPERVISOR, AGENT
+  teamId?: string;
 }
 
 interface AuthContextType {
@@ -21,8 +23,9 @@ interface AuthContextType {
   tenantName: string;
   loading: boolean;
   logout: () => Promise<void>;
-  loginAsDemo: (tenantId?: string, tenantName?: string) => void;
+  loginAsDemo: (tenantId?: string, tenantName?: string, role?: string) => void;
   switchTenant: (newTenantId: string, newTenantName?: string) => void;
+  hasPermission: (permission: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -85,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const data = userDoc.data();
             setTenantId(data.tenantId || 't-1');
             setTenantName(data.tenantName || 'Alpha Provedor (ISP)');
+            setUser(prev => prev ? { ...prev, role: data.role || 'AGENT', teamId: data.teamId } : null);
           } else {
             // Provision initial tenant for new user
             const defaultTenantId = 't-1';
@@ -99,11 +103,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             });
             setTenantId(defaultTenantId);
             setTenantName(defaultTenantName);
+            setUser(prev => prev ? { ...prev, role: 'ADMIN' } : null);
           }
         } catch (error) {
           console.warn("Erro ao buscar dados do usuário no Firestore, usando fallback local:", error);
           setTenantId('t-1');
           setTenantName('Alpha Provedor (ISP)');
+          setUser(prev => prev ? { ...prev, role: 'ADMIN' } : null);
         }
       } else {
         // If not in Firebase Auth, verify if demo session exists
@@ -120,21 +126,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const loginAsDemo = (tId: string = 't-1', tName: string = 'Alpha Provedor (ISP)') => {
+  const loginAsDemo = (tId: string = 't-1', tName: string = 'Alpha Provedor (ISP)', role: string = 'ADMIN') => {
     const demoUser: AppUser = {
       uid: 'demo-admin-uid',
       email: 'admin@octo8.io',
       displayName: 'André Pereira (Admin)',
-      isDemo: true
+      isDemo: true,
+      role
     };
     setUser(demoUser);
     setTenantId(tId);
     setTenantName(tName);
+    
+    // Create a structured mock token for backend verification (uid|tenantId|role)
+    const mockToken = `demo-token-demo-admin-uid|${tId}|${role}`;
+    
     try {
       localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify({
         ...demoUser,
         tenantId: tId,
-        tenantName: tName
+        tenantName: tName,
+        token: mockToken
       }));
     } catch (e) {
       console.warn("Storage write error:", e);
@@ -155,6 +167,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Mocked RBAC Implementation for Demo based on PRD scopes
+  const hasPermission = (permission: string): boolean => {
+    if (!user || !user.role) return false;
+    if (user.role === 'ADMIN') return true; // Admins bypass everything
+    
+    // Simplistic RBAC matrix for Supervisor / Agent
+    const roles: Record<string, string[]> = {
+      'SUPERVISOR': ['view_reports', 'manage_agents', 'transfer_calls', 'view_dashboard', 'manage_tickets'],
+      'AGENT': ['view_dashboard', 'answer_calls', 'manage_tickets']
+    };
+
+    return roles[user.role]?.includes(permission) || false;
+  };
+
   const logout = async () => {
     try {
       localStorage.removeItem(DEMO_STORAGE_KEY);
@@ -168,7 +194,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, tenantId, tenantName, loading, logout, loginAsDemo, switchTenant }}>
+    <AuthContext.Provider value={{ user, tenantId, tenantName, loading, logout, loginAsDemo, switchTenant, hasPermission }}>
       {!loading && children}
     </AuthContext.Provider>
   );

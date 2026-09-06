@@ -24,8 +24,8 @@ export default function Login() {
     window.open(window.location.href, '_blank');
   };
 
-  const handleDemoLogin = () => {
-    loginAsDemo('t-1', 'Alpha Provedor (ISP)');
+  const handleDemoLogin = (role: string) => {
+    loginAsDemo('t-1', 'Alpha Provedor (ISP)', role);
     navigate('/');
   };
 
@@ -93,14 +93,32 @@ export default function Login() {
               </span>
             </div>
             <p className="text-xs text-slate-600 mb-3">
-              Acesse como Administrador do tenant <strong>Alpha Provedor (ISP)</strong> com todos os módulos e métricas liberados.
+              Simule a visão de diferentes perfis (RBAC) no tenant <strong>Alpha Provedor (ISP)</strong>.
             </p>
-            <button
-              onClick={handleDemoLogin}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-all hover:shadow hover:shadow-blue-600/20 active:scale-[0.99]"
-            >
-              Entrar como Administrador Demo <ArrowRight className="w-4 h-4" />
-            </button>
+            
+            <div className="space-y-2">
+              <button
+                onClick={() => handleDemoLogin('ADMIN')}
+                className="w-full flex items-center justify-center gap-2 py-2 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow-sm transition-all"
+              >
+                Entrar como Administrador (Acesso Total)
+              </button>
+              
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleDemoLogin('SUPERVISOR')}
+                  className="flex-1 flex items-center justify-center py-2 px-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-sm transition-all"
+                >
+                  Supervisor
+                </button>
+                <button
+                  onClick={() => handleDemoLogin('AGENT')}
+                  className="flex-1 flex items-center justify-center py-2 px-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-sm transition-all"
+                >
+                  Atendente
+                </button>
+              </div>
+            </div>
           </div>
 
           <div className="relative my-5">

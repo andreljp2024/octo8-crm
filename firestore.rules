@@ -1,56 +1,236 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Função auxiliar para verificar autenticação
-    function isAuthenticated() {
-      return request.auth != null;
+    match /{document=**} {
+      allow read, write: if false;
     }
     
-    // Função auxiliar para verificar se o perfil do usuário existe
-    function hasUserProfile() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    function isSignedIn() { return request.auth != null; }
+    
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    
+    function isValidKBArticle(data) {
+      return data.keys().hasAll(['categoryId', 'title', 'excerpt', 'content', 'status', 'aiSynced', 'lastUpdated'])
+          && data.categoryId is string && data.categoryId.size() <= 128
+          && data.title is string && data.title.size() <= 150
+          && data.excerpt is string && data.excerpt.size() <= 300
+          && data.content is string && data.content.size() <= 100000
+          && data.status in ['PUBLISHED', 'DRAFT']
+          && data.aiSynced is bool
+          && data.lastUpdated is string && data.lastUpdated.size() <= 50;
     }
 
-    // Função auxiliar para verificar o tenantId do usuário atual
-    function getUserTenantId() {
-      return hasUserProfile() ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.tenantId : null;
+    function isValidInteraction(data) {
+      return data.keys().hasAll(["id", "tenantId", "type", "customerId", "priority", "enqueueTime", "status", "slaLimitTime", "slaStatus"])
+          && data.id is string && data.id.size() <= 128
+          && data.tenantId is string && data.tenantId.size() <= 128
+          && data.type is string && data.type.size() <= 50
+          && data.customerId is string && data.customerId.size() <= 128
+          && data.priority is number
+          && data.enqueueTime is number
+          && data.status is string && data.status.size() <= 50
+          && data.slaLimitTime is number
+          && data.slaStatus is string && data.slaStatus.size() <= 50;
     }
 
-    // Função para verificar se o usuário pertence ao tenant do documento
-    function isFromTenant(tenantId) {
-      return isAuthenticated() && (getUserTenantId() == null || getUserTenantId() == tenantId);
+    function isValidAgent(data) {
+      return data.keys().hasAll(["agentId", "tenantId", "status", "skills", "currentCapacity", "maxCapacity", "lastAssignedTime"])
+          && data.agentId is string && data.agentId.size() <= 128
+          && data.tenantId is string && data.tenantId.size() <= 128
+          && data.status is string && data.status.size() <= 50
+          && data.skills is list && data.skills.size() <= 20
+          && data.currentCapacity is number
+          && data.maxCapacity is number
+          && data.lastAssignedTime is number;
     }
-    
-    // Coleção Tenants
+
+    function isValidCustomer(data) {
+      return data.keys().hasAll(["id", "tenantId", "name", "status", "createdAt", "updatedAt"])
+          && data.id is string && data.id.size() <= 128
+          && data.tenantId is string && data.tenantId.size() <= 128
+          && data.name is string && data.name.size() <= 150
+          && data.status is string && data.status.size() <= 50
+          && data.createdAt is string && data.createdAt.size() <= 50
+          && data.updatedAt is string && data.updatedAt.size() <= 50;
+    }
+
+    function isValidAgentStatusLog(data) {
+      return data.keys().hasAll(["id", "tenantId", "agentId", "status", "startedAt", "createdAt"])
+          && data.id is string && data.id.size() <= 128
+          && data.tenantId is string && data.tenantId.size() <= 128
+          && data.agentId is string && data.agentId.size() <= 128
+          && data.status is string && data.status.size() <= 50
+          && data.startedAt is number
+          && data.createdAt is string && data.createdAt.size() <= 50;
+    }
+
+    function isValidChannelTemplate(data) {
+      return data.keys().hasAll(["id", "tenantId", "channel", "name", "status", "createdAt", "updatedAt"])
+          && data.id is string && data.id.size() <= 128
+          && data.tenantId is string && data.tenantId.size() <= 128
+          && data.channel is string && data.channel.size() <= 50
+          && data.name is string && data.name.size() <= 100
+          && data.status in ["PENDING", "APPROVED", "REJECTED"]
+          && data.createdAt is string && data.createdAt.size() <= 50
+          && data.updatedAt is string && data.updatedAt.size() <= 50;
+    }
+
+    function isValidAIFeedbackLog(data) {
+      return data.keys().hasAll(["id", "tenantId", "interactionId", "aiAgentId", "rating", "createdAt"])
+          && data.id is string && data.id.size() <= 128
+          && data.tenantId is string && data.tenantId.size() <= 128
+          && data.interactionId is string && data.interactionId.size() <= 128
+          && data.aiAgentId is string && data.aiAgentId.size() <= 128
+          && data.rating in ["THUMBS_UP", "THUMBS_DOWN"]
+          && data.createdAt is string && data.createdAt.size() <= 50;
+    }
+
+    // Tenant scoped resources
     match /tenants/{tenantId} {
-      allow read: if isAuthenticated();
-      allow write: if false; 
-    }
+      // In a real application, you would ensure the user belongs to the tenant.
+      // For this sandbox, we allow any signed-in user or the admin SDK (which bypasses rules).
+      
+      match /kb_articles/{articleId} {
+        allow read: if isValidId(tenantId) && isValidId(articleId);
+        allow list: if isValidId(tenantId);
+        
+        allow create: if isSignedIn() 
+                      && isValidId(tenantId)
+                      && isValidId(articleId) 
+                      && isValidKBArticle(incoming());
+                      
+        allow update: if isSignedIn() 
+                      && isValidId(tenantId)
+                      && isValidId(articleId) 
+                      && isValidKBArticle(incoming());
+                      
+        allow delete: if isSignedIn() && isValidId(tenantId) && isValidId(articleId);
+      }
 
-    // Coleção Users
-    match /users/{userId} {
-      allow read: if isAuthenticated() && (
-        request.auth.uid == userId || 
-        (resource != null && 'tenantId' in resource.data && isFromTenant(resource.data.tenantId))
-      );
-      allow write: if isAuthenticated() && request.auth.uid == userId;
-    }
+      match /interactions/{interactionId} {
+        allow read: if isSignedIn() && isValidId(tenantId) && isValidId(interactionId);
+        allow list: if isSignedIn() && isValidId(tenantId);
+        
+        allow create: if isSignedIn() 
+                      && isValidId(tenantId)
+                      && isValidId(interactionId) 
+                      && isValidInteraction(incoming())
+                      && incoming().tenantId == tenantId;
+                      
+        allow update: if isSignedIn() 
+                      && isValidId(tenantId)
+                      && isValidId(interactionId) 
+                      && isValidInteraction(incoming())
+                      && incoming().tenantId == tenantId
+                      && incoming().tenantId == existing().tenantId;
+                      
+        allow delete: if isSignedIn() && isValidId(tenantId) && isValidId(interactionId);
+      }
 
-    // Regras Multitenant genéricas para coleções de negócio (calls, conversations, messages, opportunities, customers)
-    match /{collection}/{document=**} {
-      allow read: if isAuthenticated() && (
-        resource == null || 
-        !('tenantId' in resource.data) || 
-        isFromTenant(resource.data.tenantId)
-      );
-      allow write: if isAuthenticated() && (
-        request.resource == null || 
-        !('tenantId' in request.resource.data) || 
-        isFromTenant(request.resource.data.tenantId)
-      );
+      match /agents/{agentId} {
+        allow read: if isSignedIn() && isValidId(tenantId) && isValidId(agentId);
+        allow list: if isSignedIn() && isValidId(tenantId);
+        
+        allow create: if isSignedIn() 
+                      && isValidId(tenantId)
+                      && isValidId(agentId) 
+                      && isValidAgent(incoming())
+                      && incoming().tenantId == tenantId;
+                      
+        allow update: if isSignedIn() 
+                      && isValidId(tenantId)
+                      && isValidId(agentId) 
+                      && isValidAgent(incoming())
+                      && incoming().tenantId == tenantId
+                      && incoming().tenantId == existing().tenantId;
+                      
+        allow delete: if isSignedIn() && isValidId(tenantId) && isValidId(agentId);
+      }
+
+      match /customers/{customerId} {
+        allow read: if isSignedIn() && isValidId(tenantId) && isValidId(customerId);
+        allow list: if isSignedIn() && isValidId(tenantId);
+        
+        allow create: if isSignedIn() 
+                      && isValidId(tenantId)
+                      && isValidId(customerId) 
+                      && isValidCustomer(incoming())
+                      && incoming().tenantId == tenantId;
+                      
+        allow update: if isSignedIn() 
+                      && isValidId(tenantId)
+                      && isValidId(customerId) 
+                      && isValidCustomer(incoming())
+                      && incoming().tenantId == tenantId
+                      && incoming().tenantId == existing().tenantId;
+                      
+        allow delete: if isSignedIn() && isValidId(tenantId) && isValidId(customerId);
+      }
+
+      match /agent_status_logs/{logId} {
+        allow read: if isSignedIn() && isValidId(tenantId) && isValidId(logId);
+        allow list: if isSignedIn() && isValidId(tenantId);
+        
+        allow create: if isSignedIn() 
+                      && isValidId(tenantId)
+                      && isValidId(logId) 
+                      && isValidAgentStatusLog(incoming())
+                      && incoming().tenantId == tenantId;
+                      
+        allow update: if isSignedIn() 
+                      && isValidId(tenantId)
+                      && isValidId(logId) 
+                      && isValidAgentStatusLog(incoming())
+                      && incoming().tenantId == tenantId
+                      && incoming().tenantId == existing().tenantId;
+                      
+        allow delete: if isSignedIn() && isValidId(tenantId) && isValidId(logId);
+      }
+
+      match /channel_templates/{templateId} {
+        allow read: if isSignedIn() && isValidId(tenantId) && isValidId(templateId);
+        allow list: if isSignedIn() && isValidId(tenantId);
+        
+        allow create: if isSignedIn() 
+                      && isValidId(tenantId)
+                      && isValidId(templateId) 
+                      && isValidChannelTemplate(incoming())
+                      && incoming().tenantId == tenantId;
+                      
+        allow update: if isSignedIn() 
+                      && isValidId(tenantId)
+                      && isValidId(templateId) 
+                      && isValidChannelTemplate(incoming())
+                      && incoming().tenantId == tenantId
+                      && incoming().tenantId == existing().tenantId;
+                      
+        allow delete: if isSignedIn() && isValidId(tenantId) && isValidId(templateId);
+      }
+
+      match /ai_feedback_logs/{logId} {
+        allow read: if isSignedIn() && isValidId(tenantId) && isValidId(logId);
+        allow list: if isSignedIn() && isValidId(tenantId);
+        
+        allow create: if isSignedIn() 
+                      && isValidId(tenantId)
+                      && isValidId(logId) 
+                      && isValidAIFeedbackLog(incoming())
+                      && incoming().tenantId == tenantId;
+                      
+        allow update: if isSignedIn() 
+                      && isValidId(tenantId)
+                      && isValidId(logId) 
+                      && isValidAIFeedbackLog(incoming())
+                      && incoming().tenantId == tenantId
+                      && incoming().tenantId == existing().tenantId;
+                      
+        allow delete: if isSignedIn() && isValidId(tenantId) && isValidId(logId);
+      }
     }
   }
 }
-

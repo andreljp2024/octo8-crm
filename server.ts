@@ -1,10 +1,11 @@
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, FunctionDeclaration, Type, Schema } from '@google/genai';
 import { MockSgpAdapter } from './src/lib/integration-hub/SgpAdapter';
 import { MockPbxAdapter } from './src/lib/integration-hub/PbxAdapter';
-import { globalQueueEngine, Interaction } from './src/lib/routing/QueueEngine';
+import { globalQueueEngine, QueuedInteraction } from './src/lib/routing/QueueEngine';
+import { requireAuth, requirePermission, AuthRequest } from './src/server/middleware/auth.ts';
 
 async function startServer() {
   const app = express();
@@ -32,9 +33,9 @@ async function startServer() {
   });
 
   // (Fase 2) Routing Engine - Atualizar Status do Agente
-  app.post('/api/routing/agent-status', (req, res) => {
+  app.post('/api/routing/agent-status', async (req, res) => {
     const tenantId = req.headers['x-tenant-id'] as string || 'default-tenant';
-    const { agentId, status, skills, maxCapacity } = req.body;
+    const { agentId, status, skills, maxCapacity, reasonCode } = req.body;
     
     if (!agentId || !status) {
       return res.status(400).json({ error: 'agentId and status are required' });
@@ -49,6 +50,22 @@ async function startServer() {
       maxCapacity: maxCapacity || 3,
       lastAssignedTime: Date.now()
     });
+
+    try {
+      const { adminDb } = await import('./src/server/firebaseAdmin.ts');
+      // Save status log for WFM
+      await adminDb.collection(`tenants/${tenantId}/agent_status_logs`).add({
+        id: Math.random().toString(36).substring(7), // Just a sandbox ID
+        tenantId,
+        agentId,
+        status,
+        reasonCode: reasonCode || '',
+        startedAt: Date.now(),
+        createdAt: new Date().toISOString()
+      });
+    } catch (e) {
+      console.warn("Could not write agent status log", e);
+    }
     
     res.json({ success: true, agentId, status });
   });
@@ -56,14 +73,14 @@ async function startServer() {
   // Mock endpoint para forçar uma nova interação na fila
   app.post('/api/routing/test-enqueue', (req, res) => {
     const tenantId = req.headers['x-tenant-id'] as string || 'default-tenant';
-    const interaction: Interaction = {
+    const interaction = {
       id: `interaction-${Date.now()}`,
       tenantId,
       type: 'WHATSAPP',
       customerId: 'test-customer',
       priority: 1,
       enqueueTime: Date.now(),
-      status: 'QUEUED'
+      status: 'HUMAN_REQUESTED' as const
     };
     globalQueueEngine.enqueueInteraction(interaction);
     res.json({ success: true, interaction });
@@ -76,12 +93,14 @@ async function startServer() {
     res.json({ assignments });
   });
 
-  // (Fase 3/4) Integration Hub - SGP Endpoint
-  app.get('/api/integration/customer/:id', async (req, res) => {
+  // (Fase 3/4) Integration Hub - SGP Endpoint (Protected via RBAC)
+  app.get('/api/integration/customer/:id', requireAuth as any, requirePermission('view_dashboard') as any, async (req: any, res) => {
     try {
-      // In a real environment, extract tenantId from req headers (Tenant Context)
-      const tenantId = req.headers['x-tenant-id'] as string || 'default-tenant';
+      // Now using actual Tenant Context derived from the JWT Token by the Auth Middleware
+      const tenantId = req.user?.tenantId || 'default-tenant';
       
+      console.log(`[Backend Auth] Request by UID: ${req.user?.uid} | Tenant: ${tenantId} | Role: ${req.user?.role}`);
+
       const sgpAdapter = new MockSgpAdapter(tenantId);
       const customer = await sgpAdapter.getCustomer(req.params.id);
       
@@ -201,6 +220,37 @@ async function startServer() {
     }
   });
 
+  // AI Feedback endpoint
+  app.post('/api/copilot/agent-chat/feedback', async (req, res) => {
+    const tenantId = req.headers['x-tenant-id'] as string || 'default-tenant';
+    const { interactionId, agentName, rating, comment, correctedContent } = req.body;
+    
+    if (!interactionId || !rating) {
+      return res.status(400).json({ error: 'interactionId and rating are required' });
+    }
+
+    try {
+      const { adminDb } = await import('./src/server/firebaseAdmin.ts');
+      
+      const logId = Math.random().toString(36).substring(7);
+      await adminDb.collection(`tenants/${tenantId}/ai_feedback_logs`).doc(logId).set({
+        id: logId,
+        tenantId,
+        interactionId,
+        aiAgentId: agentName || 'unknown-agent',
+        rating,
+        comment: comment || '',
+        correctedContent: correctedContent || '',
+        createdAt: new Date().toISOString()
+      });
+
+      res.json({ success: true, logId });
+    } catch (error) {
+      console.error('Feedback error:', error);
+      res.status(500).json({ error: 'Failed to record feedback' });
+    }
+  });
+
   // Gemini Interactive Agent Chat Playground
   app.post('/api/copilot/agent-chat', async (req, res) => {
     const { agentName, systemPrompt, message, history } = req.body;
@@ -216,11 +266,42 @@ async function startServer() {
         ? history.slice(-6).map((h: any) => `${h.role === 'user' ? 'Cliente' : 'Agente'}: ${h.text}`).join('\n')
         : '';
 
+      const { db } = await import('./src/lib/firebase.ts');
+      const { collection, getDocs, query, where } = await import('firebase/firestore');
+      
+      const tenantId = req.headers['x-tenant-id'] as string || 'octo8-tenant-01';
+
+      // RAG: Retrieve knowledge base context for this tenant
+      let ragContext = "";
+      try {
+        const kbQuery = query(
+          collection(db, `tenants/${tenantId}/kb_articles`),
+          where('aiSynced', '==', true)
+        );
+        const kbSnapshot = await getDocs(kbQuery);
+        
+        if (!kbSnapshot.empty) {
+           ragContext = "BASE DE CONHECIMENTO (RAG):\n" + kbSnapshot.docs.map((doc: any) => {
+             const data = doc.data();
+             return `Título: ${data.title}\nConteúdo: ${data.content}`;
+           }).join('\n\n---\n\n');
+        } else {
+           console.log("[RAG] No articles found for tenant:", tenantId);
+        }
+      } catch (err) {
+        console.warn("Could not retrieve RAG context", err);
+      }
+
       const prompt = `
 Você é o agente de IA chamado "${agentName || 'Assistente Octo8'}" de uma plataforma de Contact Center & VoIP multitenant para Provedores de Internet (ISPs) e empresas de Telecomunicações.
 
 DIRETRIZES DO SEU PERSONA / PROMPT DE SISTEMA:
 ${systemPrompt || 'Você atua no atendimento prestativo ao cliente, sanando dúvidas de suporte, faturas e vendas de planos de internet.'}
+
+### IMPORTANTE: BASE DE CONHECIMENTO ###
+Você DEVE utilizar as informações abaixo para basear suas respostas, caso o contexto da pergunta se encaixe.
+${ragContext}
+########################################
 
 HISTÓRICO RECENTE:
 ${formattedHistory}
@@ -296,16 +377,77 @@ Responda de forma concisa, educada e direta ao ponto, como se estivesse no chat 
         parts: [{ text: h.text }]
       }));
 
+      const tools: any = [{
+        functionDeclarations: [
+          {
+            name: "consultarClienteSGP",
+            description: "Consulta os dados cadastrais de um cliente no sistema SGP.",
+            parameters: {
+              type: Type.OBJECT,
+              properties: {
+                customerId: {
+                  type: Type.STRING,
+                  description: "O ID do cliente para consulta"
+                }
+              },
+              required: ["customerId"]
+            }
+          },
+          {
+            name: "consultarConexaoSGP",
+            description: "Consulta o status da conexão de fibra (ONU) e potência óptica do cliente.",
+            parameters: {
+              type: Type.OBJECT,
+              properties: {
+                customerId: {
+                  type: Type.STRING,
+                  description: "O ID do cliente para consultar a conexão"
+                }
+              },
+              required: ["customerId"]
+            }
+          }
+        ]
+      }];
+
       const chat = ai.chats.create({
         model: 'gemini-2.5-flash',
         config: {
           systemInstruction: systemPrompt,
           temperature: 0.5,
+          tools: tools,
         },
         history: formattedHistory
       });
 
-      const response = await chat.sendMessage({ message });
+      let response = await chat.sendMessage({ message });
+      
+      // Handle function calls (Tool Registry execution loop)
+      if (response.functionCalls && response.functionCalls.length > 0) {
+        const sgpAdapter = new MockSgpAdapter('default-tenant');
+        const functionResponses = [];
+        
+        for (const call of response.functionCalls) {
+          console.log(`[Tool Registry] Executing ${call.name}`);
+          let result = {};
+          if (call.name === 'consultarClienteSGP') {
+            result = await sgpAdapter.getCustomer((call.args as any).customerId) || { error: "Customer not found" };
+          } else if (call.name === 'consultarConexaoSGP') {
+            result = await sgpAdapter.getConnectionStatus((call.args as any).customerId) || { error: "Connection not found" };
+          }
+          
+          functionResponses.push({
+            functionResponse: {
+              name: call.name,
+              response: result
+            }
+          });
+        }
+        
+        // Send function results back to the model
+        response = await chat.sendMessage(functionResponses as any);
+      }
+
       const reply = response.text || "Desculpe, sem resposta gerada.";
       
       res.json({ reply });

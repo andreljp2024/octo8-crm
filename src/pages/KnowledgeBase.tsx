@@ -7,6 +7,7 @@ import {
 import { cn } from '@/lib/utils';
 import { collection, onSnapshot, query, setDoc, doc, updateDoc, deleteDoc, orderBy } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface Category {
   id: string;
@@ -82,6 +83,9 @@ const INITIAL_ARTICLES: Article[] = [
 ];
 
 export default function KnowledgeBase() {
+  const { user } = useAuth();
+  const tenantId = user?.tenantId || 'octo8-tenant-01'; // Fallback to test tenant
+
   const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
   const [articles, setArticles] = useState<Article[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('ALL');
@@ -112,14 +116,15 @@ export default function KnowledgeBase() {
 
   // Firestore Subscription: Articles
   useEffect(() => {
-    const q = query(collection(db, 'kb_articles'));
+    // Scope data strictly to tenant's collection
+    const q = query(collection(db, `tenants/${tenantId}/kb_articles`));
     
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       if (snapshot.empty && articles.length === 0) {
         // Seed mock articles to Firestore if empty
         INITIAL_ARTICLES.forEach(async (art) => {
           try {
-            await setDoc(doc(db, 'kb_articles', art.id), {
+            await setDoc(doc(db, `tenants/${tenantId}/kb_articles`, art.id), {
               ...art,
               lastUpdated: new Date().toISOString()
             });
@@ -138,7 +143,7 @@ export default function KnowledgeBase() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [tenantId]);
 
   const filteredArticles = articles
     .filter(a => activeCategory === 'ALL' || a.categoryId === activeCategory)
@@ -185,7 +190,7 @@ export default function KnowledgeBase() {
       if (viewingArticle?.id === id) setViewingArticle(null);
       
       try {
-        await deleteDoc(doc(db, 'kb_articles', id));
+        await deleteDoc(doc(db, `tenants/${tenantId}/kb_articles`, id));
       } catch (err) {
         console.warn("Could not delete from Firestore:", err);
       }
@@ -210,7 +215,7 @@ export default function KnowledgeBase() {
       setArticles(prev => prev.map(a => a.id === updated.id ? updated : a));
       
       try {
-        await updateDoc(doc(db, 'kb_articles', updated.id), { ...updated });
+        await updateDoc(doc(db, `tenants/${tenantId}/kb_articles`, updated.id), { ...updated });
       } catch (err) {
         console.warn("Could not update article in Firestore:", err);
       }
@@ -229,7 +234,7 @@ export default function KnowledgeBase() {
       setArticles(prev => [newArt, ...prev]);
 
       try {
-        await setDoc(doc(db, 'kb_articles', newArt.id), newArt);
+        await setDoc(doc(db, `tenants/${tenantId}/kb_articles`, newArt.id), newArt);
       } catch (err) {
         console.warn("Could not save new article to Firestore:", err);
       }
@@ -284,10 +289,10 @@ export default function KnowledgeBase() {
       setSyncFeedback('Base de Conhecimento indexada com sucesso no motor de IA!');
       
       // Update in Firestore
-      for (const art of updatedArticles) {
-        if (!art.aiSynced) { // actually, we check if they were not synced before, but we can just update all or just those that need it
+      for (const art of articles) {
+        if (!art.aiSynced) { 
           try {
-            await updateDoc(doc(db, 'kb_articles', art.id), { aiSynced: true });
+            await updateDoc(doc(db, `tenants/${tenantId}/kb_articles`, art.id), { aiSynced: true });
           } catch (e) {
             console.warn("Could not sync to Firestore", e);
           }

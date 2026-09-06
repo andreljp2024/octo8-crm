@@ -1,21 +1,24 @@
-export type InteractionType = 'WHATSAPP' | 'WEBCHAT' | 'VOICE' | 'INSTAGRAM';
+import { ConversationState, AgentState, Conversation } from '../core/types';
+import { adminDb } from '../../server/firebaseAdmin';
 
-export interface Interaction {
-  id: string;
+export interface QueuedInteraction {
+  id: string; // Maps to Conversation ID
   tenantId: string;
-  type: InteractionType;
+  type: string; // 'WHATSAPP' | 'WEBCHAT' | 'VOICE'
   customerId: string;
   skillRequired?: string;
   priority: number;
   enqueueTime: number;
-  status: 'QUEUED' | 'ROUTING' | 'ASSIGNED' | 'HANDLED';
+  status: ConversationState;
   assignedAgentId?: string;
+  slaLimitTime: number; // For SLA Engine tracking
+  slaStatus: 'WITHIN_SLA' | 'NEAR_BREACH' | 'BREACHED';
 }
 
 export interface AgentWorkforce {
   agentId: string;
   tenantId: string;
-  status: 'ONLINE' | 'AVAILABLE' | 'BUSY' | 'PAUSED' | 'OFFLINE';
+  status: AgentState;
   skills: string[];
   currentCapacity: number;
   maxCapacity: number;
@@ -23,39 +26,93 @@ export interface AgentWorkforce {
 }
 
 export class QueueEngine {
-  private queues: Map<string, Interaction[]> = new Map();
+  private queues: Map<string, QueuedInteraction[]> = new Map();
   private agents: Map<string, AgentWorkforce> = new Map();
+  private assignedInteractions: Map<string, QueuedInteraction[]> = new Map(); // tenantId -> assignments
+  private slaInterval: NodeJS.Timeout | null = null;
+  private db = adminDb;
 
   constructor() {
-    console.log('[QueueEngine] Initialized Multitenant Routing Engine');
+    console.log('[QueueEngine] Initialized Multitenant Routing Engine with Firestore Sync');
+    this.startSlaEngine();
   }
 
-  // Register or update an agent's status in the workforce pool
+  // Helper to persist queue state to Firestore
+  private async persistInteraction(interaction: QueuedInteraction) {
+    try {
+      await this.db.collection(`tenants/${interaction.tenantId}/interactions`).doc(interaction.id).set(interaction, { merge: true });
+    } catch (e) {
+      console.error(`[QueueEngine] Failed to persist interaction ${interaction.id}:`, e);
+    }
+  }
+
+  // SLA Engine: Runs periodically to check for SLA breaches
+  private startSlaEngine() {
+    if (this.slaInterval) clearInterval(this.slaInterval);
+    this.slaInterval = setInterval(() => {
+      const now = Date.now();
+      for (const [tenantId, queue] of this.queues.entries()) {
+        let queueUpdated = false;
+        for (const interaction of queue) {
+          if (interaction.status === 'HUMAN_REQUESTED') {
+            const timeElapsed = now - interaction.enqueueTime;
+            const timeLeft = interaction.slaLimitTime - now;
+            
+            if (timeLeft <= 0 && interaction.slaStatus !== 'BREACHED') {
+              interaction.slaStatus = 'BREACHED';
+              interaction.priority += 10; // Bump priority on breach
+              queueUpdated = true;
+              console.log(`[SLA Engine] ALERT: Tenant ${tenantId} Conversation ${interaction.id} BREACHED SLA!`);
+              this.persistInteraction(interaction);
+            } else if (timeLeft > 0 && timeLeft <= 60000 && interaction.slaStatus === 'WITHIN_SLA') {
+              // 1 min to breach
+              interaction.slaStatus = 'NEAR_BREACH';
+              interaction.priority += 5;
+              queueUpdated = true;
+              this.persistInteraction(interaction);
+            }
+          }
+        }
+        if (queueUpdated) {
+          // Re-sort queue if priorities changed
+          queue.sort((a, b) => b.priority - a.priority || a.enqueueTime - b.enqueueTime);
+        }
+      }
+    }, 10000); // Check every 10s
+  }
+
   public updateAgentStatus(agent: AgentWorkforce): void {
     this.agents.set(agent.agentId, agent);
+    // Also persist agent state to Firestore
+    this.db.collection(`tenants/${agent.tenantId}/agents`).doc(agent.agentId).set(agent, { merge: true }).catch(console.error);
     this.processQueues(agent.tenantId);
   }
 
-  // Enqueue a new omnichannel interaction (Chat/Voice)
-  public enqueueInteraction(interaction: Interaction): void {
+  public enqueueInteraction(interaction: Omit<QueuedInteraction, 'slaStatus' | 'slaLimitTime'>): void {
     const tenantQueue = this.queues.get(interaction.tenantId) || [];
     
-    // Insert based on Priority (Skill Based & Priority Routing)
-    tenantQueue.push(interaction);
+    const newInteraction: QueuedInteraction = {
+      ...interaction,
+      slaLimitTime: interaction.enqueueTime + (5 * 60 * 1000), // Default 5 min SLA for Human Response
+      slaStatus: 'WITHIN_SLA'
+    };
+
+    tenantQueue.push(newInteraction);
     tenantQueue.sort((a, b) => b.priority - a.priority || a.enqueueTime - b.enqueueTime);
     
     this.queues.set(interaction.tenantId, tenantQueue);
-    console.log(`[QueueEngine] Interaction ${interaction.id} queued for Tenant ${interaction.tenantId}`);
+    console.log(`[QueueEngine] Conversation ${interaction.id} QUEUED for Tenant ${interaction.tenantId}`);
+    
+    // Persist to DB
+    this.persistInteraction(newInteraction);
     
     this.processQueues(interaction.tenantId);
   }
 
-  // Core ACD (Automatic Call Distributor) Logic
   private processQueues(tenantId: string): void {
     const queue = this.queues.get(tenantId);
     if (!queue || queue.length === 0) return;
 
-    // Filter available agents for this tenant with capacity
     const availableAgents = Array.from(this.agents.values()).filter(
       a => a.tenantId === tenantId && 
            a.status === 'AVAILABLE' && 
@@ -64,67 +121,55 @@ export class QueueEngine {
 
     if (availableAgents.length === 0) return;
 
-    // Process queued interactions
     for (let i = 0; i < queue.length; i++) {
       const interaction = queue[i];
-      if (interaction.status !== 'QUEUED') continue;
+      if (interaction.status !== 'HUMAN_REQUESTED') continue;
 
-      // Find best agent: Matches skill (if required) + Longest Idle (ACD standard)
       const bestAgent = availableAgents
         .filter(a => !interaction.skillRequired || a.skills.includes(interaction.skillRequired))
         .sort((a, b) => a.lastAssignedTime - b.lastAssignedTime)[0];
 
       if (bestAgent) {
-        // Assign Interaction
         interaction.status = 'ASSIGNED';
         interaction.assignedAgentId = bestAgent.agentId;
         
-        // Update Agent State
         bestAgent.currentCapacity += 1;
         bestAgent.lastAssignedTime = Date.now();
         if (bestAgent.currentCapacity >= bestAgent.maxCapacity) {
           bestAgent.status = 'BUSY';
         }
 
-        console.log(`[QueueEngine] Routing Interaction ${interaction.id} to Agent ${bestAgent.agentId}`);
+        console.log(`[QueueEngine] ACD: Routed ${interaction.id} to Agent ${bestAgent.agentId}`);
         
-        // Remove from queue
+        // Persist interaction and agent state
+        this.persistInteraction(interaction);
+        this.db.collection(`tenants/${tenantId}/agents`).doc(bestAgent.agentId).set(bestAgent, { merge: true }).catch(console.error);
+        
+        // Move to assigned map
+        const assignedList = this.assignedInteractions.get(tenantId) || [];
+        assignedList.push(interaction);
+        this.assignedInteractions.set(tenantId, assignedList);
+
         queue.splice(i, 1);
-        i--; // Adjust index after splice
+        i--;
       }
     }
   }
 
   public getQueueMetrics(tenantId: string) {
     const queue = this.queues.get(tenantId) || [];
+    const slaBreached = queue.filter(q => q.slaStatus === 'BREACHED').length;
     return {
       waitingInteractions: queue.length,
-      longestWaitTime: queue.length > 0 ? Date.now() - queue[0].enqueueTime : 0
+      longestWaitTime: queue.length > 0 ? Date.now() - queue[0].enqueueTime : 0,
+      slaBreached
     };
   }
 
-  // Retrieve assigned interactions for a specific agent
-  public getAssignedInteractions(agentId: string, tenantId: string): Interaction[] {
-    // In a real database, we would query the conversations table where status is ASSIGNED to this agent.
-    // For this in-memory sandbox, we iterate through assigned states (or simulate it).
-    
-    // As the Queue Engine removes from memory array when assigned, we need a separate store or we return mock structure for the UI link.
-    // Since we pop from `this.queues` on assignment, let's just return a mock list representing the distributed tickets.
-    
-    return [
-      {
-        id: `conv-assigned-${Date.now()}`,
-        tenantId,
-        type: 'WHATSAPP',
-        customerId: 'Cliente Distribuido',
-        priority: 1,
-        enqueueTime: Date.now() - 120000,
-        status: 'ASSIGNED',
-        assignedAgentId: agentId
-      }
-    ];
+  public getAssignedInteractions(agentId: string, tenantId: string): QueuedInteraction[] {
+    const assignedList = this.assignedInteractions.get(tenantId) || [];
+    return assignedList.filter(i => i.assignedAgentId === agentId);
   }
 }
 
-// Singleton instance for the Node.js process
 export const globalQueueEngine = new QueueEngine();

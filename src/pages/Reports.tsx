@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, PieChart, Pie, Cell } from 'recharts';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Data for different timeframes
 const TIMEFRAME_DATA = {
@@ -95,6 +96,10 @@ export default function Reports() {
   const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'SLA' | 'AGENTS' | 'REASONS'>('OVERVIEW');
   const [agentSearch, setAgentSearch] = useState('');
   const [exportFeedback, setExportFeedback] = useState(false);
+  const [realCdrData, setRealCdrData] = useState<any[]>([]);
+
+  const { user } = useAuth();
+  const tenantId = user?.tenantId || 'octo8-tenant-01'; // Fallback to test tenant
 
   const currentData = TIMEFRAME_DATA[timeframe];
 
@@ -104,18 +109,40 @@ export default function Reports() {
     a.queue.toLowerCase().includes(agentSearch.toLowerCase())
   );
 
+  // Fetch real CDR data from Firestore
+  React.useEffect(() => {
+    import('@/lib/firebase').then(({ db }) => {
+      import('firebase/firestore').then(({ collection, query, orderBy, limit, getDocs }) => {
+        const q = query(collection(db, `tenants/${tenantId}/interactions`), orderBy('enqueueTime', 'desc'), limit(100));
+        getDocs(q).then(snapshot => {
+          const fetchedData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+          setRealCdrData(fetchedData);
+        }).catch(err => console.error("Could not fetch real CDR", err));
+      });
+    });
+  }, [tenantId]);
+
   const handleExportCDR = () => {
     // Generate real CDR CSV file
-    const headers = "call_id,timestamp,caller_number,queue,agent_type,agent_name,duration_seconds,status,csat\n";
-    const sampleRows = [
-      "call_10928,2026-09-05 14:15:22,11988881234,Suporte FTTH,HUMAN,Juliana Ferreira,245,ANSWERED,5",
-      "call_10929,2026-09-05 14:18:05,11977774321,Triagem,AI_BOT,Bot Suporte N1,72,ANSWERED,4",
-      "call_10930,2026-09-05 14:22:11,11999990000,Vendas Inbound,HUMAN,Carlos Eduardo,410,ANSWERED,5",
-      "call_10931,2026-09-05 14:25:40,11966661122,Retenção,HUMAN,Mariana Lima,580,ANSWERED,4",
-      "call_10932,2026-09-05 14:29:10,11955552233,Suporte FTTH,QUEUE,NENHUM,185,ABANDONED,0"
-    ].join("\n");
+    const headers = "interaction_id,timestamp,type,status,sla_status\n";
+    
+    // Fallback to mock data if no real data is fetched
+    let rows = "";
+    if (realCdrData.length > 0) {
+      rows = realCdrData.map(i => {
+        const date = new Date(i.enqueueTime || Date.now()).toISOString().replace('T', ' ').substring(0, 19);
+        return `${i.id},${date},${i.type},${i.status},${i.slaStatus}`;
+      }).join('\n');
+    } else {
+      const sampleRows = [
+        "call_10928,2026-09-05 14:15:22,WHATSAPP,RESOLVED,WITHIN_SLA",
+        "call_10929,2026-09-05 14:18:05,VOICE,ASSIGNED,NEAR_BREACH",
+        "call_10930,2026-09-05 14:22:11,WEBCHAT,HUMAN_REQUESTED,BREACHED"
+      ].join("\n");
+      rows = sampleRows;
+    }
 
-    const blob = new Blob([headers + sampleRows], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;

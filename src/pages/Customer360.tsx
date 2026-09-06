@@ -56,6 +56,9 @@ export interface Customer {
     openedAt: string;
     category: string;
   }>;
+  whatsappOptIn?: boolean;
+  marketingOptIn?: boolean;
+  aiProcessingOptIn?: boolean;
 }
 
 // Mock initial data
@@ -75,6 +78,9 @@ const MOCK_CUSTOMERS: Customer[] = [
     phone: '+55 11 3290-8800',
     address: 'Av. Paulista, 1000 - Bela Vista, São Paulo/SP',
     plan: 'Link Dedicado 1 Giga Full Duplex + Bloco /29 IPv4',
+    whatsappOptIn: true,
+    marketingOptIn: true,
+    aiProcessingOptIn: true,
     fiberDetails: {
       onuStatus: 'ONLINE',
       rxPower: -18.6,
@@ -256,8 +262,20 @@ export default function Customer360() {
     if (selectedCustomer) {
       setIsSgpSyncing(true);
       setSgpData(null);
+      
+      let token = '';
+      try {
+        const saved = localStorage.getItem('octo8_demo_session');
+        if (saved) {
+          token = JSON.parse(saved).token;
+        }
+      } catch (e) {}
+
       fetch(`/api/integration/customer/${selectedCustomer.id}`, {
-        headers: { 'x-tenant-id': tenantId || 'default-tenant' }
+        headers: { 
+          'x-tenant-id': tenantId || 'default-tenant',
+          'Authorization': `Bearer ${token}` 
+        }
       })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
@@ -1146,10 +1164,10 @@ export default function Customer360() {
                 </div>
               )}
 
-              {/* TAB 4: Cadastro Completo */}
+              {/* TAB 4: Cadastro Completo & LGPD */}
               {activeCustomerTab === 'DETAILS' && (
                 <div className="space-y-4">
-                  <h4 className="font-bold text-slate-800 text-sm">Dados Cadastrais & Endereço de Instalação</h4>
+                  <h4 className="font-bold text-slate-800 text-sm">Dados Cadastrais & Consentimentos (LGPD)</h4>
 
                   <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
                     <div>
@@ -1176,6 +1194,24 @@ export default function Customer360() {
                             {tag}
                           </span>
                         ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-white border border-slate-200 rounded-xl space-y-3">
+                    <span className="text-[10px] font-bold uppercase text-slate-500">Privacidade & Consentimentos (LGPD)</span>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-2">
+                      <div className="flex items-center gap-2 p-2 rounded-lg border border-slate-100 bg-slate-50">
+                        <div className={cn("w-2 h-2 rounded-full", selectedCustomer.whatsappOptIn !== false ? "bg-emerald-500" : "bg-red-500")} />
+                        <span className="text-xs font-semibold text-slate-700">WhatsApp Opt-in</span>
+                      </div>
+                      <div className="flex items-center gap-2 p-2 rounded-lg border border-slate-100 bg-slate-50">
+                        <div className={cn("w-2 h-2 rounded-full", selectedCustomer.marketingOptIn !== false ? "bg-emerald-500" : "bg-red-500")} />
+                        <span className="text-xs font-semibold text-slate-700">Marketing & Ofertas</span>
+                      </div>
+                      <div className="flex items-center gap-2 p-2 rounded-lg border border-slate-100 bg-slate-50">
+                        <div className={cn("w-2 h-2 rounded-full", selectedCustomer.aiProcessingOptIn !== false ? "bg-emerald-500" : "bg-red-500")} />
+                        <span className="text-xs font-semibold text-slate-700">Processamento IA</span>
                       </div>
                     </div>
                   </div>

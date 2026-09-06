@@ -13,6 +13,7 @@ import Omnichannel from '@/pages/Omnichannel';
 import CrmSales from '@/pages/CrmSales';
 import Customer360 from '@/pages/Customer360';
 import AiAutomation from '@/pages/AiAutomation';
+import Settings from '@/pages/Settings';
 import TenantSettings from '@/pages/TenantSettings';
 import KnowledgeBase from '@/pages/KnowledgeBase';
 import Reports from '@/pages/Reports';
@@ -36,7 +37,7 @@ function ProtectedRoutes() {
         <Route path="/ai" element={<AiAutomation />} />
         <Route path="/knowledge" element={<KnowledgeBase />} />
         <Route path="/reports" element={<Reports />} />
-        <Route path="/settings" element={<TenantSettings />} />
+        <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AppLayout>

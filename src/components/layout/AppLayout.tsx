@@ -29,18 +29,18 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const [isSidebarOpen, setSidebarOpen] = React.useState(true);
   const [isTenantMenuOpen, setIsTenantMenuOpen] = React.useState(false);
-  const { user, logout, tenantId, tenantName, switchTenant } = useAuth();
+  const { user, logout, tenantId, tenantName, switchTenant, hasPermission } = useAuth();
 
   const navigation = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-    { name: 'Omnichannel', href: '/omnichannel', icon: MessageSquare },
-    { name: 'Telefonia', href: '/telephony', icon: PhoneCall },
-    { name: 'Customer 360', href: '/customers', icon: Users },
-    { name: 'CRM & Vendas', href: '/crm', icon: Briefcase },
-    { name: 'IA & Automação', href: '/ai', icon: Bot },
-    { name: 'Knowledge Base', href: '/knowledge', icon: BookOpen },
-    { name: 'Relatórios', href: '/reports', icon: BarChart3 },
-    { name: 'Configurações', href: '/settings', icon: Settings },
+    { name: 'Dashboard', href: '/', icon: LayoutDashboard, permission: 'view_dashboard' },
+    { name: 'Omnichannel', href: '/omnichannel', icon: MessageSquare, permission: 'manage_tickets' },
+    { name: 'Telefonia', href: '/telephony', icon: PhoneCall, permission: 'answer_calls' },
+    { name: 'Customer 360', href: '/customers', icon: Users, permission: 'view_dashboard' },
+    { name: 'CRM & Vendas', href: '/crm', icon: Briefcase, permission: 'view_dashboard' },
+    { name: 'IA & Automação', href: '/ai', icon: Bot, permission: 'manage_agents' },
+    { name: 'Knowledge Base', href: '/knowledge', icon: BookOpen, permission: 'view_dashboard' },
+    { name: 'Relatórios', href: '/reports', icon: BarChart3, permission: 'view_reports' },
+    { name: 'Configurações', href: '/settings', icon: Settings, permission: 'admin_only' },
   ];
 
   return (
@@ -177,7 +177,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           )}
         >
           <nav className="p-3 space-y-1 h-full overflow-y-auto">
-            {navigation.map((item) => {
+            {navigation.filter(item => hasPermission(item.permission)).map((item) => {
               const isActive = location.pathname === item.href;
               return (
                 <Link
