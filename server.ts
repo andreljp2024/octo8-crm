@@ -52,10 +52,13 @@ async function startServer() {
     });
 
     try {
-      const { adminDb } = await import('./src/server/firebaseAdmin.ts');
+      const { db } = await import('./src/lib/firebase.ts');
+      const { doc, setDoc } = await import('firebase/firestore');
+      
+      const logId = Math.random().toString(36).substring(7);
       // Save status log for WFM
-      await adminDb.collection(`tenants/${tenantId}/agent_status_logs`).add({
-        id: Math.random().toString(36).substring(7), // Just a sandbox ID
+      await setDoc(doc(db, `tenants/${tenantId}/agent_status_logs/${logId}`), {
+        id: logId, // Just a sandbox ID
         tenantId,
         agentId,
         status,
@@ -230,10 +233,11 @@ async function startServer() {
     }
 
     try {
-      const { adminDb } = await import('./src/server/firebaseAdmin.ts');
+      const { db } = await import('./src/lib/firebase.ts');
+      const { doc, setDoc } = await import('firebase/firestore');
       
       const logId = Math.random().toString(36).substring(7);
-      await adminDb.collection(`tenants/${tenantId}/ai_feedback_logs`).doc(logId).set({
+      await setDoc(doc(db, `tenants/${tenantId}/ai_feedback_logs/${logId}`), {
         id: logId,
         tenantId,
         interactionId,

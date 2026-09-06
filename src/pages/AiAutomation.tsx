@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Bot, Settings, Play, CheckCircle2, AlertTriangle, 
   Plus, MoreVertical, Cpu, MessageSquare, Zap, X,
-  Send, Sparkles, Sliders, Shield, BookOpen, Trash2, Edit3, ArrowRight, RefreshCw
+  Send, Sparkles, Sliders, Shield, BookOpen, Trash2, Edit3, ArrowRight, RefreshCw, ThumbsUp, ThumbsDown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { collection, onSnapshot, query, setDoc, doc, updateDoc, deleteDoc, orderBy } from 'firebase/firestore';
@@ -94,7 +94,7 @@ export default function AiAutomation() {
 
   // Playground state
   const [activePlaygroundAgent, setActivePlaygroundAgent] = useState<Agent | null>(null);
-  const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'agent'; text: string }[]>([]);
+  const [chatMessages, setChatMessages] = useState<{ id: string; role: 'user' | 'agent'; text: string; feedback?: 'THUMBS_UP' | 'THUMBS_DOWN' }[]>([]);
   const [inputChat, setInputChat] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
 
@@ -236,6 +236,7 @@ export default function AiAutomation() {
     setActivePlaygroundAgent(agent);
     setChatMessages([
       { 
+        id: `msg-${Date.now()}`,
         role: 'agent', 
         text: `Olá! Sou o agente "${agent.name}" pronto para testar. Como posso ajudar seu atendimento hoje?` 
       }
@@ -248,7 +249,7 @@ export default function AiAutomation() {
 
     const userMessage = inputChat.trim();
     setInputChat('');
-    const newHistory = [...chatMessages, { role: 'user' as const, text: userMessage }];
+    const newHistory = [...chatMessages, { id: `msg-${Date.now()}`, role: 'user' as const, text: userMessage }];
     setChatMessages(newHistory);
     setIsChatLoading(true);
 
@@ -264,15 +265,35 @@ export default function AiAutomation() {
         })
       });
       const data = await res.json();
-      setChatMessages(prev => [...prev, { role: 'agent', text: data.reply }]);
+      setChatMessages(prev => [...prev, { id: `msg-${Date.now() + 1}`, role: 'agent', text: data.reply }]);
     } catch (err) {
       console.error("Error talking to agent sandbox:", err);
       setChatMessages(prev => [...prev, { 
+        id: `msg-${Date.now() + 1}`,
         role: 'agent', 
         text: 'Desculpe, ocorreu uma oscilação na resposta da IA. Mas a configuração do seu agente está gravada e operante!' 
       }]);
     } finally {
       setIsChatLoading(false);
+    }
+  };
+
+  const handleFeedback = async (messageId: string, rating: 'THUMBS_UP' | 'THUMBS_DOWN') => {
+    setChatMessages(prev => prev.map(m => m.id === messageId ? { ...m, feedback: rating } : m));
+    
+    try {
+      await fetch('/api/copilot/agent-chat/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          interactionId: messageId,
+          agentName: activePlaygroundAgent?.id || 'unknown',
+          rating,
+          comment: 'Feedback from Playground Sandbox'
+        })
+      });
+    } catch (e) {
+      console.warn("Failed to send feedback", e);
     }
   };
 
@@ -669,6 +690,24 @@ export default function AiAutomation() {
                   {msg.role === 'user' ? 'Você (Cliente)' : activePlaygroundAgent.name}
                 </span>
                 <p className="whitespace-pre-wrap">{msg.text}</p>
+                {msg.role === 'agent' && (
+                  <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100">
+                    <button 
+                      onClick={() => handleFeedback(msg.id, 'THUMBS_UP')}
+                      className={cn("p-1 rounded transition-colors", msg.feedback === 'THUMBS_UP' ? "text-emerald-600 bg-emerald-50" : "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50")}
+                      title="Boa resposta"
+                    >
+                      <ThumbsUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button 
+                      onClick={() => handleFeedback(msg.id, 'THUMBS_DOWN')}
+                      className={cn("p-1 rounded transition-colors", msg.feedback === 'THUMBS_DOWN' ? "text-red-600 bg-red-50" : "text-slate-400 hover:text-red-600 hover:bg-red-50")}
+                      title="Resposta ruim"
+                    >
+                      <ThumbsDown className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
 
