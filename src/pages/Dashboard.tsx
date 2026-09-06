@@ -16,26 +16,47 @@ export default function Dashboard() {
     activeCustomers: 0,
     churnRisk: 0,
     activeCalls: 312, // Mocked for real-time volatility feeling
-    sla: 82.4
+    sla: 82.4,
+    queueWaiting: 0,
+    longestWait: 0
   });
   const [downloadSuccess, setDownloadSuccess] = useState(false);
 
   useEffect(() => {
     // Fetch real metrics from our Express backend
-    fetch('/api/metrics')
-      .then(res => res.json())
-      .then(data => {
-        setMetrics(prev => ({
-          ...prev,
-          mrr: data.mrr,
-          activeCustomers: data.activeCustomers,
-          churnRisk: data.churnRisk
-        }));
-      })
-      .catch(err => console.error("Error fetching metrics:", err));
+    const fetchMetrics = () => {
+      fetch('/api/metrics')
+        .then(res => res.json())
+        .then(data => {
+          setMetrics(prev => ({
+            ...prev,
+            mrr: data.mrr,
+            activeCustomers: data.activeCustomers,
+            churnRisk: data.churnRisk
+          }));
+        })
+        .catch(err => console.error("Error fetching metrics:", err));
 
-    // Simulate real-time active calls fluctuation
+      // Fetch Real-time Queue Engine metrics
+      fetch('/api/routing/queue-metrics', {
+        headers: { 'x-tenant-id': 'default-tenant' } // Ideally from AuthContext
+      })
+        .then(res => res.json())
+        .then(data => {
+          setMetrics(prev => ({
+            ...prev,
+            queueWaiting: data.waitingInteractions || 0,
+            longestWait: data.longestWaitTime || 0
+          }));
+        })
+        .catch(err => console.error("Error fetching queue metrics:", err));
+    };
+
+    fetchMetrics();
+
+    // Simulate real-time active calls fluctuation and poll real backend
     const interval = setInterval(() => {
+      fetchMetrics();
       setMetrics(prev => ({
         ...prev,
         activeCalls: Math.max(100, Math.min(500, prev.activeCalls + Math.floor(Math.random() * 11) - 5))
@@ -147,12 +168,12 @@ export default function Dashboard() {
           trend="+12"
         />
         <KpiCard 
-          title="Fila de Espera (URA)" 
-          value={metrics.churnRisk.toString()} 
-          subtext="TME: 03:45 (Alerta Amarelo)" 
+          title="Fila de Espera (URA/Chat)" 
+          value={metrics.queueWaiting.toString()} 
+          subtext={`TME Máx: ${Math.floor(metrics.longestWait / 60000)}m ${Math.floor((metrics.longestWait % 60000) / 1000)}s`} 
           icon={<Clock className="w-5 h-5 text-amber-600" />} 
-          trend="+5"
-          alert={metrics.churnRisk > 30}
+          trend={metrics.queueWaiting > 5 ? "Crítico" : "+1"}
+          alert={metrics.queueWaiting > 10}
         />
         <KpiCard 
           title="Chamadas Simultâneas" 

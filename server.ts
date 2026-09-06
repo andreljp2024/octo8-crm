@@ -2,6 +2,9 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import { MockSgpAdapter } from './src/lib/integration-hub/SgpAdapter';
+import { MockPbxAdapter } from './src/lib/integration-hub/PbxAdapter';
+import { globalQueueEngine, Interaction } from './src/lib/routing/QueueEngine';
 
 async function startServer() {
   const app = express();
@@ -19,6 +22,76 @@ async function startServer() {
   // Rotas da API (Fase 2 - Backend)
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', service: 'octo8-core', timestamp: new Date().toISOString() });
+  });
+
+  // (Fase 2) Routing Engine - Fila Endpoint
+  app.get('/api/routing/queue-metrics', (req, res) => {
+    const tenantId = req.headers['x-tenant-id'] as string || 'default-tenant';
+    const metrics = globalQueueEngine.getQueueMetrics(tenantId);
+    res.json(metrics);
+  });
+
+  // (Fase 2) Routing Engine - Atualizar Status do Agente
+  app.post('/api/routing/agent-status', (req, res) => {
+    const tenantId = req.headers['x-tenant-id'] as string || 'default-tenant';
+    const { agentId, status, skills, maxCapacity } = req.body;
+    
+    if (!agentId || !status) {
+      return res.status(400).json({ error: 'agentId and status are required' });
+    }
+    
+    globalQueueEngine.updateAgentStatus({
+      agentId,
+      tenantId,
+      status,
+      skills: skills || ['suporte', 'vendas'],
+      currentCapacity: 0, // Simplified for sandbox
+      maxCapacity: maxCapacity || 3,
+      lastAssignedTime: Date.now()
+    });
+    
+    res.json({ success: true, agentId, status });
+  });
+
+  // Mock endpoint para forçar uma nova interação na fila
+  app.post('/api/routing/test-enqueue', (req, res) => {
+    const tenantId = req.headers['x-tenant-id'] as string || 'default-tenant';
+    const interaction: Interaction = {
+      id: `interaction-${Date.now()}`,
+      tenantId,
+      type: 'WHATSAPP',
+      customerId: 'test-customer',
+      priority: 1,
+      enqueueTime: Date.now(),
+      status: 'QUEUED'
+    };
+    globalQueueEngine.enqueueInteraction(interaction);
+    res.json({ success: true, interaction });
+  });
+
+  // (Fase 3/4) Integration Hub - SGP Endpoint
+  app.get('/api/integration/customer/:id', async (req, res) => {
+    try {
+      // In a real environment, extract tenantId from req headers (Tenant Context)
+      const tenantId = req.headers['x-tenant-id'] as string || 'default-tenant';
+      
+      const sgpAdapter = new MockSgpAdapter(tenantId);
+      const customer = await sgpAdapter.getCustomer(req.params.id);
+      
+      if (!customer) {
+        return res.status(404).json({ error: 'Customer not found in SGP' });
+      }
+
+      const connection = await sgpAdapter.getConnectionStatus(req.params.id);
+
+      res.json({
+        ...customer,
+        network_status: connection
+      });
+    } catch (error) {
+      console.error('[Integration Hub] Error:', error);
+      res.status(500).json({ error: 'Failed to fetch external customer data' });
+    }
   });
 
   // Mock endpoint para simular busca de métricas

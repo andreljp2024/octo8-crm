@@ -111,6 +111,28 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               className="pl-9 pr-4 py-2 bg-slate-100 border-transparent focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 rounded-lg text-sm w-64 transition-all outline-none"
             />
           </div>
+          
+          {/* Agent Status Toggle */}
+          <div className="hidden md:flex items-center gap-2 border-r border-slate-200 pr-3 mr-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase">Status:</span>
+            <select 
+              className="text-xs font-bold bg-slate-50 border border-slate-200 rounded-md px-2 py-1 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"
+              onChange={(e) => {
+                fetch('/api/routing/agent-status', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'x-tenant-id': tenantId || 'default' },
+                  body: JSON.stringify({ agentId: user?.uid || 'agent-1', status: e.target.value })
+                }).catch(console.error);
+              }}
+              defaultValue="ONLINE"
+            >
+              <option value="AVAILABLE" className="text-emerald-700">🟢 Disponível</option>
+              <option value="BUSY" className="text-red-700">🔴 Ocupado</option>
+              <option value="PAUSED" className="text-amber-700">🟡 Pausado</option>
+              <option value="OFFLINE" className="text-slate-700">⚫ Offline</option>
+            </select>
+          </div>
+
           <button className="p-2 rounded-full hover:bg-slate-100 text-slate-600 relative transition-colors">
             <Bell className="w-5 h-5" />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
