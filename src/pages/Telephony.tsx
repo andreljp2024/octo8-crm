@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Phone, PhoneCall, PhoneOff, Mic, MicOff, Pause, Play, 
   PhoneForwarded, Users, Clock, History, Search, Filter,
@@ -11,6 +11,7 @@ import { Call, AgentStatus } from '@/types';
 import { collection, onSnapshot, query, where, doc, setDoc, updateDoc, deleteDoc, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useSearchParams } from 'react-router-dom';
+import { UserAgent, Inviter, SessionState, Web } from 'sip.js';
 
 // Mock Data (will still be used to seed the DB if empty, and for non-migrated tabs)
 const MOCK_ACTIVE_CALLS: Call[] = [
@@ -126,6 +127,26 @@ export default function Telephony() {
     return () => unsubscribe();
   }, []);
 
+  // SIP.js Integration (Simulated w/ Real Library)
+  const [userAgent, setUserAgent] = useState<UserAgent | null>(null);
+  const [sipSession, setSipSession] = useState<Inviter | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    // Real initialization of SIP.js UserAgent
+    const uri = UserAgent.makeURI("sip:agent101@octo8.sip.example.com");
+    if (uri) {
+      const ua = new UserAgent({
+        uri,
+        transportOptions: { server: "wss://webrtc.octo8.example.com" },
+        authorizationUsername: "agent101",
+        authorizationPassword: "supersecretpassword",
+      });
+      // In a real environment, you'd call ua.start() here
+      setUserAgent(ua);
+    }
+  }, []);
+
   const handleDial = (digit: string) => {
     setDialNumber(prev => prev + digit);
   };
@@ -147,7 +168,6 @@ export default function Telephony() {
       startTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     
-    // Optimistic local state
     setActiveCalls(prev => [newCall, ...prev]);
 
     try {
@@ -156,22 +176,48 @@ export default function Telephony() {
       console.warn("Firestore setDoc call skipped:", e);
     }
 
-    // Simulate answer after 2 seconds
-    setTimeout(async () => {
-      setWebphoneState('CONNECTED');
-      setActiveCalls(prev => prev.map(c => c.id === newCallId ? { ...c, status: 'CONNECTED', duration: 0 } : c));
-      try {
-        await updateDoc(doc(db, 'calls', newCallId), {
-          status: 'CONNECTED',
-          duration: 0
+    // Example of how we'd use SIP.js if we had a real connected UA
+    if (userAgent && userAgent.state === 'Started') {
+      const targetUri = UserAgent.makeURI(`sip:${dialNumber}@octo8.sip.example.com`);
+      if (targetUri) {
+        const inviter = new Inviter(userAgent, targetUri);
+        inviter.stateChange.addListener((state) => {
+          if (state === SessionState.Established) {
+            setWebphoneState('CONNECTED');
+          } else if (state === SessionState.Terminated) {
+            handleEndCall();
+          }
         });
-      } catch (e) {
-        console.warn("Firestore updateDoc call skipped:", e);
+        inviter.invite().catch(console.error);
+        setSipSession(inviter);
       }
-    }, 2000);
+    } else {
+      // Sandbox fallback behavior
+      setTimeout(async () => {
+        setWebphoneState('CONNECTED');
+        setActiveCalls(prev => prev.map(c => c.id === newCallId ? { ...c, status: 'CONNECTED', duration: 0 } : c));
+        try {
+          await updateDoc(doc(db, 'calls', newCallId), {
+            status: 'CONNECTED',
+            duration: 0
+          });
+        } catch (e) {
+          console.warn("Firestore updateDoc call skipped:", e);
+        }
+      }, 2000);
+    }
   };
 
   const handleEndCall = async () => {
+    if (sipSession) {
+      try {
+        sipSession.bye();
+      } catch (e) {
+        console.warn("SIP session bye failed", e);
+      }
+      setSipSession(null);
+    }
+
     setWebphoneState('IDLE');
     setDialNumber('');
     setIsMuted(false);

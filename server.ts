@@ -161,6 +161,39 @@ Responda de forma concisa, educada e direta ao ponto, como se estivesse no chat 
     }
   });
 
+  // Gemini KB Excerpt Generator
+  app.post('/api/copilot/kb-excerpt', async (req, res) => {
+    const { content } = req.body;
+    const fallbackExcerpt = "Resumo gerado automaticamente indisponível. (Modo offline/fallback ativado).";
+
+    if (!ai) {
+      return res.json({ excerpt: fallbackExcerpt });
+    }
+
+    try {
+      if (!content) return res.status(400).json({ error: 'Content is required' });
+
+      const prompt = `
+      Leia o seguinte conteúdo de um artigo de Base de Conhecimento (Contact Center / Telecom).
+      Gere um resumo altamente conciso em exatas 2 frases (máximo 120 caracteres no total). 
+      Este resumo será usado como 'excerpt' e indexado para buscas RAG por agentes virtuais.
+      
+      Conteúdo do Artigo:
+      ${content}
+      `;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+      });
+
+      res.json({ excerpt: response.text || fallbackExcerpt });
+    } catch (error) {
+      console.error('Gemini error in kb-excerpt:', error);
+      res.json({ excerpt: fallbackExcerpt });
+    }
+  });
+
   // Vite middleware para desenvolvimento
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

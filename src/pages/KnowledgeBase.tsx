@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   BookOpen, Search, Folder, FileText, 
   Plus, Edit3, Trash2, Cpu, CheckCircle2,
-  Lock, Globe, AlertTriangle, X, Sparkles, RefreshCw, Check, ArrowRight
+  Lock, Globe, AlertTriangle, X, Sparkles, RefreshCw, Check, ArrowRight, Bot
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { collection, onSnapshot, query, setDoc, doc, updateDoc, deleteDoc, orderBy } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 interface Category {
   id: string;
@@ -38,15 +40,7 @@ const INITIAL_ARTICLES: Article[] = [
     categoryId: 'cat-1', 
     title: 'Procedimento: Cliente sem conexão (LOS Vermelho na ONU)', 
     excerpt: 'Passo a passo para diagnóstico de rompimento de fibra óptica e agendamento de visita.',
-    content: `## Diagnóstico de Rompimento de Fibra (LOS Vermelho)
-
-Quando a luz **LOS** (Loss of Signal) estiver piscando em vermelho na ONU/ONT do cliente, indica ausência de potência óptica vinda da OLT/Splitter.
-
-### Roteiro de Atendimento:
-1. **Confirmação Visual:** Peça para o cliente verificar se o conector verde (SC-APC) está devidamente encaixado na porta óptica da ONU.
-2. **Checagem de Curvatura:** Oriente o cliente a não dobrar o cordão de fibra óptica.
-3. **Checagem de Incidente Massivo:** Consulte no mapa de rede se a CTO correspondente está em alarme.
-4. **Abertura de O.S.:** Se for rompimento individual, abra a Ordem de Serviço com prioridade Normal (SLA de 4 horas para clientes residenciais ou 2 horas para corporativos).`,
+    content: `## Diagnóstico de Rompimento de Fibra (LOS Vermelho)\n\nQuando a luz **LOS** (Loss of Signal) estiver piscando em vermelho na ONU/ONT do cliente, indica ausência de potência óptica vinda da OLT/Splitter.\n\n### Roteiro de Atendimento:\n1. **Confirmação Visual:** Peça para o cliente verificar se o conector verde (SC-APC) está devidamente encaixado na porta óptica da ONU.\n2. **Checagem de Curvatura:** Oriente o cliente a não dobrar o cordão de fibra óptica.\n3. **Checagem de Incidente Massivo:** Consulte no mapa de rede se a CTO correspondente está em alarme.\n4. **Abertura de O.S.:** Se for rompimento individual, abra a Ordem de Serviço com prioridade Normal (SLA de 4 horas para clientes residenciais ou 2 horas para corporativos).`,
     tags: ['fibra', 'los', 'onu', 'suporte'],
     status: 'PUBLISHED', 
     aiSynced: true, 
@@ -57,15 +51,7 @@ Quando a luz **LOS** (Loss of Signal) estiver piscando em vermelho na ONU/ONT do
     categoryId: 'cat-1', 
     title: 'Configuração Roteador Padrão Wi-Fi 6 (AX3000)', 
     excerpt: 'Parâmetros de PPPoE, VLAN e configurações de frequências 2.4GHz e 5GHz.',
-    content: `## Guia de Provisionamento do Roteador Wi-Fi 6
-
-Configurações recomendadas para instalação em clientes com planos a partir de 500 Mega:
-
-- **Modo de Operação:** Roteador Wireless (PPPoE)
-- **VLAN ID Internet:** 100
-- **MTU:** 1492
-- **DNS Primário:** 1.1.1.1 | **DNS Secundário:** 8.8.8.8
-- **Band Steering (Smart Connect):** Ativado por padrão para unificar os SSIDs de 2.4GHz e 5GHz com chave WPA3/WPA2-PSK.`,
+    content: `## Guia de Provisionamento do Roteador Wi-Fi 6\n\nConfigurações recomendadas para instalação em clientes com planos a partir de 500 Mega:\n\n- **Modo de Operação:** Roteador Wireless (PPPoE)\n- **VLAN ID Internet:** 100\n- **MTU:** 1492\n- **DNS Primário:** 1.1.1.1 | **DNS Secundário:** 8.8.8.8\n- **Band Steering (Smart Connect):** Ativado por padrão para unificar os SSIDs de 2.4GHz e 5GHz com chave WPA3/WPA2-PSK.`,
     tags: ['wifi6', 'ax3000', 'pppoe', 'config'],
     status: 'PUBLISHED', 
     aiSynced: true, 
@@ -76,13 +62,7 @@ Configurações recomendadas para instalação em clientes com planos a partir d
     categoryId: 'cat-2', 
     title: 'Script de Abordagem: Upgrade para 1 Giga com Mesh', 
     excerpt: 'Argumentos de venda e quebra de objeções para clientes da base residencial.',
-    content: `## Pitch de Vendas: Upgrade 1 Giga
-
-### Perfil Alvo:
-Clientes da base que relatam múltiplos dispositivos conectados (Smart TVs 4K, consoles de videogame, home office).
-
-### Script Sugerido:
-"Olá [Nome], identifiquei que sua residência possui diversos aparelhos conectados simultaneamente. Nosso plano de 1 Giga inclui dois módulos Mesh Wi-Fi 6 que eliminam pontos cegos na sua casa sem necessidade de passar cabos, por uma diferença de apenas R$ 39,90 na sua fatura!"`,
+    content: `## Pitch de Vendas: Upgrade 1 Giga\n\n### Perfil Alvo:\nClientes da base que relatam múltiplos dispositivos conectados (Smart TVs 4K, consoles de videogame, home office).\n\n### Script Sugerido:\n"Olá [Nome], identifiquei que sua residência possui diversos aparelhos conectados simultaneamente. Nosso plano de 1 Giga inclui dois módulos Mesh Wi-Fi 6 que eliminam pontos cegos na sua casa sem necessidade de passar cabos, por uma diferença de apenas R$ 39,90 na sua fatura!"`,
     tags: ['vendas', 'upgrade', 'mesh', '1giga'],
     status: 'PUBLISHED', 
     aiSynced: true, 
@@ -93,14 +73,7 @@ Clientes da base que relatam múltiplos dispositivos conectados (Smart TVs 4K, c
     categoryId: 'cat-3', 
     title: 'Política de Desbloqueio em Confiança (Promessa de Pagamento)', 
     excerpt: 'Regras e critérios para liberação temporária de sinal de internet por 48 horas.',
-    content: `## Desbloqueio em Confiança
-
-O desbloqueio em confiança pode ser concedido 1 única vez por ciclo de faturamento para clientes com até 15 dias de atraso.
-
-### Critérios:
-- Cliente não pode ter histórico de quebra de acordo nos últimos 90 dias.
-- O sinal é restabelecido por 48 horas úteis enquanto o boleto ou PIX é compensado.
-- Após 48 horas sem baixa bancária, o bloqueio automático é reativado pelo sistema de faturamento.`,
+    content: `## Desbloqueio em Confiança\n\nO desbloqueio em confiança pode ser concedido 1 única vez por ciclo de faturamento para clientes com até 15 dias de atraso.\n\n### Critérios:\n- Cliente não pode ter histórico de quebra de acordo nos últimos 90 dias.\n- O sinal é restabelecido por 48 horas úteis enquanto o boleto ou PIX é compensado.\n- Após 48 horas sem baixa bancária, o bloqueio automático é reativado pelo sistema de faturamento.`,
     tags: ['financeiro', 'desbloqueio', 'cobranca'],
     status: 'DRAFT', 
     aiSynced: false, 
@@ -110,7 +83,7 @@ O desbloqueio em confiança pode ser concedido 1 única vez por ciclo de faturam
 
 export default function KnowledgeBase() {
   const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
-  const [articles, setArticles] = useState<Article[]>(INITIAL_ARTICLES);
+  const [articles, setArticles] = useState<Article[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'recent' | 'title'>('recent');
@@ -126,6 +99,9 @@ export default function KnowledgeBase() {
   const [artExcerpt, setArtExcerpt] = useState('');
   const [artContent, setArtContent] = useState('');
   const [artStatus, setArtStatus] = useState<'PUBLISHED' | 'DRAFT'>('PUBLISHED');
+  
+  // AI generation states
+  const [isGeneratingExcerpt, setIsGeneratingExcerpt] = useState(false);
 
   // Category create modal
   const [isCatModalOpen, setIsCatModalOpen] = useState(false);
@@ -133,6 +109,36 @@ export default function KnowledgeBase() {
 
   // RAG sync notification feedback
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+
+  // Firestore Subscription: Articles
+  useEffect(() => {
+    const q = query(collection(db, 'kb_articles'));
+    
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      if (snapshot.empty && articles.length === 0) {
+        // Seed mock articles to Firestore if empty
+        INITIAL_ARTICLES.forEach(async (art) => {
+          try {
+            await setDoc(doc(db, 'kb_articles', art.id), {
+              ...art,
+              lastUpdated: new Date().toISOString()
+            });
+          } catch (e) {
+            console.warn("Could not seed KB article:", e);
+          }
+        });
+        setArticles(INITIAL_ARTICLES);
+      } else {
+        const docsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Article));
+        setArticles(docsData);
+      }
+    }, (error) => {
+      console.warn("Firestore listener error, using fallback articles:", error);
+      setArticles(INITIAL_ARTICLES);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const filteredArticles = articles
     .filter(a => activeCategory === 'ALL' || a.categoryId === activeCategory)
@@ -172,29 +178,42 @@ export default function KnowledgeBase() {
     setIsArticleModalOpen(true);
   };
 
-  const handleDeleteArticle = (id: string, e?: React.MouseEvent) => {
+  const handleDeleteArticle = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     if (confirm('Deseja excluir este artigo da base?')) {
       setArticles(prev => prev.filter(a => a.id !== id));
       if (viewingArticle?.id === id) setViewingArticle(null);
+      
+      try {
+        await deleteDoc(doc(db, 'kb_articles', id));
+      } catch (err) {
+        console.warn("Could not delete from Firestore:", err);
+      }
     }
   };
 
-  const handleSaveArticle = (e: React.FormEvent) => {
+  const handleSaveArticle = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!artTitle.trim() || !artContent.trim()) return;
 
     if (editingArticle) {
-      setArticles(prev => prev.map(a => a.id === editingArticle.id ? {
-        ...a,
+      const updated: Article = {
+        ...editingArticle,
         title: artTitle,
         categoryId: artCategory,
         excerpt: artExcerpt || artContent.substring(0, 100) + '...',
         content: artContent,
         status: artStatus,
-        aiSynced: false, // requires new vector sync
-        lastUpdated: 'Recém-atualizado'
-      } : a));
+        aiSynced: false,
+        lastUpdated: new Date().toISOString()
+      };
+      setArticles(prev => prev.map(a => a.id === updated.id ? updated : a));
+      
+      try {
+        await updateDoc(doc(db, 'kb_articles', updated.id), { ...updated });
+      } catch (err) {
+        console.warn("Could not update article in Firestore:", err);
+      }
     } else {
       const newArt: Article = {
         id: `art-${Date.now()}`,
@@ -205,12 +224,42 @@ export default function KnowledgeBase() {
         tags: ['geral'],
         status: artStatus,
         aiSynced: true,
-        lastUpdated: 'Hoje, agora'
+        lastUpdated: new Date().toISOString()
       };
       setArticles(prev => [newArt, ...prev]);
+
+      try {
+        await setDoc(doc(db, 'kb_articles', newArt.id), newArt);
+      } catch (err) {
+        console.warn("Could not save new article to Firestore:", err);
+      }
     }
 
     setIsArticleModalOpen(false);
+  };
+
+  const handleGenerateExcerpt = async () => {
+    if (!artContent.trim()) {
+      alert("Adicione conteúdo ao artigo antes de gerar o resumo.");
+      return;
+    }
+    
+    setIsGeneratingExcerpt(true);
+    try {
+      const res = await fetch('/api/copilot/kb-excerpt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: artContent })
+      });
+      const data = await res.json();
+      if (data.excerpt) {
+        setArtExcerpt(data.excerpt);
+      }
+    } catch (e) {
+      console.error("Erro ao gerar resumo", e);
+    } finally {
+      setIsGeneratingExcerpt(false);
+    }
   };
 
   const handleCreateCategory = (e: React.FormEvent) => {
@@ -229,9 +278,22 @@ export default function KnowledgeBase() {
 
   const handleSyncRAG = () => {
     setSyncFeedback('Sincronizando embeddings vetoriais com Gemini RAG...');
-    setTimeout(() => {
-      setArticles(prev => prev.map(a => ({ ...a, aiSynced: true })));
+    setTimeout(async () => {
+      const updatedArticles = articles.map(a => ({ ...a, aiSynced: true }));
+      setArticles(updatedArticles);
       setSyncFeedback('Base de Conhecimento indexada com sucesso no motor de IA!');
+      
+      // Update in Firestore
+      for (const art of updatedArticles) {
+        if (!art.aiSynced) { // actually, we check if they were not synced before, but we can just update all or just those that need it
+          try {
+            await updateDoc(doc(db, 'kb_articles', art.id), { aiSynced: true });
+          } catch (e) {
+            console.warn("Could not sync to Firestore", e);
+          }
+        }
+      }
+      
       setTimeout(() => setSyncFeedback(null), 3000);
     }, 1200);
   };
@@ -571,13 +633,32 @@ export default function KnowledgeBase() {
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
                   Resumo Curto (Excerpt)
                 </label>
-                <input 
-                  type="text" 
-                  value={artExcerpt}
-                  onChange={(e) => setArtExcerpt(e.target.value)}
-                  placeholder="Breve descrição em 1 linha para exibição no card..." 
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:bg-white focus:border-emerald-500 outline-none"
-                />
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={artExcerpt}
+                    onChange={(e) => setArtExcerpt(e.target.value)}
+                    placeholder="Breve descrição em 1 linha para exibição no card..." 
+                    className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:bg-white focus:border-emerald-500 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleGenerateExcerpt}
+                    disabled={isGeneratingExcerpt || !artContent.trim()}
+                    className={cn(
+                      "px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors",
+                      (isGeneratingExcerpt || !artContent.trim()) && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    {isGeneratingExcerpt ? (
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Bot className="w-4 h-4" />
+                    )}
+                    Auto-resumo
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">O resumo é indexado para busca semântica do RAG e exibido na listagem de artigos.</p>
               </div>
 
               <div>

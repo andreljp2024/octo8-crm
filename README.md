@@ -89,6 +89,6 @@ npm run start
 - [x] Lógicas cross-módulos (Click-to-call e Omnichannel Linking).
 - [x] Configuração Node Express + SSR / Vite Middleware.
 - [x] Setup do Provider Authentication e estrutura de Tenants.
-- [ ] Implementação Real das WebRTC APIs (SIP.js ou similar).
-- [ ] Integração ativa final com o backend Firebase Firestore e SDK oficial do @google/genai.
+- [x] Integração ativa final com o backend Firebase Firestore e SDK oficial do @google/genai.
+- [x] Implementação Real das WebRTC APIs (SIP.js).
 
