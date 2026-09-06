@@ -101,6 +101,44 @@ export default function Omnichannel() {
   const [resolveReason, setResolveReason] = useState('Dúvida Sanada / Suporte Concluído');
   const [showMacros, setShowMacros] = useState(false);
 
+  // Poll backend for ACD Assigned Queue (Fase 3 integration)
+  useEffect(() => {
+    const pollQueue = () => {
+      fetch('/api/routing/agent-assignments/agent-1', {
+        headers: { 'x-tenant-id': 'default-tenant' }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.assignments && data.assignments.length > 0) {
+          // Merge incoming ACD tasks with local state smoothly
+          setConversations(prev => {
+            const currentIds = new Set(prev.map(c => c.id));
+            const newAssignments = data.assignments.filter((a: any) => !currentIds.has(a.id)).map((a: any) => ({
+              id: a.id,
+              name: a.customerId,
+              channel: a.type,
+              status: 'WAITING',
+              time: new Date(a.enqueueTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              preview: 'Nova interação roteada via ACD...',
+              unread: 1
+            }));
+            
+            if (newAssignments.length > 0) {
+              return [...newAssignments, ...prev];
+            }
+            return prev;
+          });
+        }
+      })
+      .catch(console.error);
+    };
+
+    const interval = setInterval(pollQueue, 5000);
+    pollQueue(); // Initial fetch
+    
+    return () => clearInterval(interval);
+  }, []);
+
   // Firestore Subscription: Conversations
   useEffect(() => {
     const q = query(collection(db, 'conversations'));

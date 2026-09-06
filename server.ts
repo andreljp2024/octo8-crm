@@ -69,6 +69,13 @@ async function startServer() {
     res.json({ success: true, interaction });
   });
 
+  // (Fase 3) Omnichannel - Buscar tickets distribuidos para o Agente logado
+  app.get('/api/routing/agent-assignments/:agentId', (req, res) => {
+    const tenantId = req.headers['x-tenant-id'] as string || 'default-tenant';
+    const assignments = globalQueueEngine.getAssignedInteractions(req.params.agentId, tenantId);
+    res.json({ assignments });
+  });
+
   // (Fase 3/4) Integration Hub - SGP Endpoint
   app.get('/api/integration/customer/:id', async (req, res) => {
     try {
