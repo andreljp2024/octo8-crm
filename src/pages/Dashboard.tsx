@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Phone, Users, Clock, AlertTriangle, 
   CheckCircle2, XCircle, Activity, BarChart3,
-  PhoneCall, PhoneOff, PhoneForwarded, Download, FileText
+  PhoneCall, PhoneOff, PhoneForwarded, Download, FileText,
+  Zap, Sliders, MessageSquare, ExternalLink, Headphones
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StatsOverview } from '@/components/StatsOverview';
@@ -97,6 +98,45 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Operations Quick Launchpad */}
+      <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
+        <span className="text-xs font-bold uppercase tracking-wider text-slate-500 px-1 flex items-center gap-1.5">
+          <Zap className="w-3.5 h-3.5 text-amber-500" /> Ações Operacionais:
+        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <button 
+            onClick={() => navigate('/telephony')}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold transition-colors shadow-2xs"
+          >
+            <PhoneCall className="w-3.5 h-3.5" /> Webphone VoIP
+          </button>
+          <button 
+            onClick={() => navigate('/telephony?tab=QUEUES')}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-bold transition-colors border border-slate-200"
+          >
+            <Users className="w-3.5 h-3.5 text-blue-600" /> Monitorar Filas
+          </button>
+          <button 
+            onClick={() => navigate('/telephony?tab=CDR')}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-bold transition-colors border border-slate-200"
+          >
+            <Clock className="w-3.5 h-3.5 text-indigo-600" /> Gravações & CDR
+          </button>
+          <button 
+            onClick={() => navigate('/omnichannel')}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold transition-colors shadow-2xs"
+          >
+            <MessageSquare className="w-3.5 h-3.5" /> Inbox Omnichannel
+          </button>
+          <button 
+            onClick={() => navigate('/customers')}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg text-xs font-bold transition-colors shadow-2xs"
+          >
+            <Activity className="w-3.5 h-3.5" /> Diagnóstico Fibra FTTH
+          </button>
+        </div>
+      </div>
+
       {/* VoIP Specific KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard 
@@ -135,10 +175,16 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* SIP Trunk & Gateways Health */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
-            <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+          <div className="p-4 sm:p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
+            <h2 className="text-base sm:text-lg font-semibold text-slate-800 flex items-center gap-2">
               <Activity className="w-5 h-5 text-slate-500" /> Saúde dos Troncos SIP
             </h2>
+            <button
+              onClick={() => navigate('/settings')}
+              className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 hover:underline"
+            >
+              <Sliders className="w-3.5 h-3.5" /> Ajustar SBC
+            </button>
           </div>
           <div className="divide-y divide-slate-100">
             {[
@@ -146,10 +192,10 @@ export default function Dashboard() {
               { name: 'Trunk Backup (Operadora B)', status: 'STANDBY', latency: '18ms', channels: '0/100' },
               { name: 'Gateway GSM (Outbound)', status: 'DEGRADED', latency: '45ms', channels: '28/30' }
             ].map((trunk, idx) => (
-              <div key={idx} className="p-5 flex items-center justify-between hover:bg-slate-50 transition-colors">
+              <div key={idx} className="p-4 sm:p-5 flex items-center justify-between hover:bg-slate-50 transition-colors">
                 <div>
-                  <h3 className="font-medium text-slate-900">{trunk.name}</h3>
-                  <div className="flex items-center gap-3 mt-1 text-sm text-slate-500">
+                  <h3 className="font-medium text-slate-900 text-sm">{trunk.name}</h3>
+                  <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
                     <span>Canais Ativos: {trunk.channels}</span>
                     <span>•</span>
                     <span>Latência: {trunk.latency}</span>
@@ -177,30 +223,70 @@ export default function Dashboard() {
 
         {/* Real-time Call Events */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
-            <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+          <div className="p-4 sm:p-5 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
+            <h2 className="text-base sm:text-lg font-semibold text-slate-800 flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-slate-500" /> Eventos de Chamada Recentes
             </h2>
+            <button
+              onClick={() => navigate('/telephony?tab=CDR')}
+              className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 hover:underline"
+            >
+              Ver Todos no CDR <ExternalLink className="w-3.5 h-3.5" />
+            </button>
           </div>
           <div className="divide-y divide-slate-100">
             {[
-              { event: 'Transferência Falha (Blind Transfer)', caller: 'Ramal 405', time: 'Há 1 min', type: 'error', icon: <XCircle className="w-4 h-4 text-red-500" /> },
-              { event: 'Abandono na Fila (Suporte N2)', caller: '11 99999-****', time: 'Há 3 min', type: 'warning', icon: <PhoneOff className="w-4 h-4 text-amber-500" /> },
-              { event: 'Desbordo de Fila Acionado (Vendas)', caller: 'Regra SLA > 3min', time: 'Há 12 min', type: 'info', icon: <PhoneForwarded className="w-4 h-4 text-blue-500" /> },
+              { 
+                event: 'Transferência Falha (Blind Transfer)', 
+                caller: 'Ramal 405', 
+                time: 'Há 1 min', 
+                type: 'error', 
+                icon: <XCircle className="w-4 h-4 text-red-500" />,
+                actionLabel: 'Ligar 405',
+                action: () => navigate('/telephony?dial=405')
+              },
+              { 
+                event: 'Abandono na Fila (Suporte N2)', 
+                caller: '11 99999-****', 
+                time: 'Há 3 min', 
+                type: 'warning', 
+                icon: <PhoneOff className="w-4 h-4 text-amber-500" />,
+                actionLabel: 'Ver Fila',
+                action: () => navigate('/telephony?tab=QUEUES')
+              },
+              { 
+                event: 'Desbordo de Fila Acionado (Vendas)', 
+                caller: 'Regra SLA > 3min', 
+                time: 'Há 12 min', 
+                type: 'info', 
+                icon: <PhoneForwarded className="w-4 h-4 text-blue-500" />,
+                actionLabel: 'Ajustar SLA',
+                action: () => navigate('/settings')
+              },
             ].map((evt, idx) => (
-              <div key={idx} className="p-5 flex items-start gap-4 hover:bg-slate-50 transition-colors">
-                <div className={cn(
-                  "mt-0.5 w-8 h-8 rounded-full flex items-center justify-center shrink-0",
-                  evt.type === 'error' ? 'bg-red-50' :
-                  evt.type === 'warning' ? 'bg-amber-50' : 'bg-blue-50'
-                )}>
-                  {evt.icon}
+              <div key={idx} className="p-4 sm:p-5 flex items-center justify-between gap-3 hover:bg-slate-50 transition-colors">
+                <div className="flex items-start gap-3">
+                  <div className={cn(
+                    "mt-0.5 w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                    evt.type === 'error' ? 'bg-red-50' :
+                    evt.type === 'warning' ? 'bg-amber-50' : 'bg-blue-50'
+                  )}>
+                    {evt.icon}
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-slate-900 text-sm">{evt.event}</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">{evt.caller}</p>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <h3 className="font-medium text-slate-900 text-sm">{evt.event}</h3>
-                  <p className="text-sm text-slate-500 mt-0.5">{evt.caller}</p>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-xs font-medium text-slate-400 hidden sm:inline">{evt.time}</span>
+                  <button
+                    onClick={evt.action}
+                    className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-xs font-bold transition-colors"
+                  >
+                    {evt.actionLabel}
+                  </button>
                 </div>
-                <span className="text-xs font-medium text-slate-400 shrink-0">{evt.time}</span>
               </div>
             ))}
           </div>

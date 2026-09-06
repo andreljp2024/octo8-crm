@@ -563,8 +563,8 @@ export default function CrmSales() {
                   <span className="text-[10px] font-bold text-slate-400 uppercase">Contato do Decisor</span>
                   {selectedDeal.phone && (
                     <button
-                      onClick={() => navigate('/telephony')}
-                      className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:text-emerald-700"
+                      onClick={() => navigate(`/telephony?dial=${encodeURIComponent(selectedDeal.phone || '')}`)}
+                      className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:text-emerald-700 hover:underline"
                     >
                       <Phone className="w-3.5 h-3.5" /> Ligar via WebRTC
                     </button>

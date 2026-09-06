@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
   MessageSquare, Phone, User, Clock, CheckCircle2, 
   AlertTriangle, Bot, MoreVertical, Send, Paperclip, 
@@ -72,6 +72,7 @@ export default function Omnichannel() {
   const navigate = useNavigate();
   const [activeConv, setActiveConv] = useState('conv-1');
   const [inputMsg, setInputMsg] = useState('');
+  const [searchParams] = useSearchParams();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [aiInsight, setAiInsight] = useState<{summary: string, sentiment: string, suggestion: string} | null>(null);
@@ -79,6 +80,19 @@ export default function Omnichannel() {
 
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Handle URL deep linking for customer or search
+  useEffect(() => {
+    const cust = searchParams.get('customer') || searchParams.get('search');
+    if (cust) {
+      setSearchTerm(cust);
+      const list = conversations.length > 0 ? conversations : MOCK_CONVERSATIONS;
+      const matched = list.find(c => c.name.toLowerCase().includes(cust.toLowerCase()));
+      if (matched) {
+        setActiveConv(matched.id);
+      }
+    }
+  }, [searchParams, conversations]);
 
   // Modals & Macros State
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);

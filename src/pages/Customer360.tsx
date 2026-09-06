@@ -252,8 +252,9 @@ export default function Customer360() {
     const custId = searchParams.get('id');
     const searchVal = searchParams.get('search');
     if (searchVal) setSearchQuery(searchVal);
-    if (custId && customers.length > 0) {
-      const match = customers.find(c => c.id === custId);
+    if (custId) {
+      const list = customers.length > 0 ? customers : MOCK_CUSTOMERS;
+      const match = list.find(c => c.id === custId);
       if (match) setSelectedCustomer(match);
     }
   }, [searchParams, customers]);
@@ -870,13 +871,13 @@ export default function Customer360() {
             <div className="p-3 bg-slate-800/90 border-b border-slate-700 flex flex-wrap items-center justify-between gap-2 text-xs">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => navigate('/telephony')}
+                  onClick={() => navigate(`/telephony?dial=${encodeURIComponent(selectedCustomer.phone || '')}`)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold transition-colors shadow-2xs"
                 >
                   <Phone className="w-3.5 h-3.5" /> Ligar para o Cliente
                 </button>
                 <button
-                  onClick={() => navigate('/omnichannel')}
+                  onClick={() => navigate(`/omnichannel?customer=${encodeURIComponent(selectedCustomer.name || '')}`)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-100 rounded-lg font-bold transition-colors"
                 >
                   <MessageSquare className="w-3.5 h-3.5" /> Abrir WhatsApp
