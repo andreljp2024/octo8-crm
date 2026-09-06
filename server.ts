@@ -123,7 +123,7 @@ async function startServer() {
     }
 
     try {
-      const { messages } = req.body;
+      const { messages, context } = req.body;
       if (!messages || !Array.isArray(messages) || messages.length === 0) {
         return res.status(400).json({ error: 'Valid messages array is required' });
       }
@@ -132,6 +132,8 @@ async function startServer() {
       
       const prompt = `
       Analise a conversa de atendimento ao cliente abaixo e forneça uma resposta em formato JSON estrito.
+      Considere este contexto adicional (Opcional): ${context || 'Nenhum contexto de fila/sistema fornecido.'}
+      
       A resposta deve obedecer exatamente à estrutura abaixo:
       {
         "summary": "Resumo conciso do problema relatado na conversa em até 2 frases.",

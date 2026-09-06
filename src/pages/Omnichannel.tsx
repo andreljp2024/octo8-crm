@@ -282,10 +282,15 @@ export default function Omnichannel() {
     setIsAiLoading(true);
     setAiInsight(null);
     try {
+      const activeData = conversations.find(c => c.id === activeConv);
+      const queueContext = activeData 
+        ? `Cliente: ${activeData.name}, Status atual: ${activeData.status}, Canal: ${activeData.channel}, Aguardou na fila desde: ${activeData.time}`
+        : 'Contexto de fila não identificado';
+
       const res = await fetch('/api/copilot/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages })
+        body: JSON.stringify({ messages, context: queueContext })
       });
       if (res.ok) {
         const data = await res.json();

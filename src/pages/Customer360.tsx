@@ -247,6 +247,29 @@ export default function Customer360() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [activeCustomerTab, setActiveCustomerTab] = useState<'FTTH' | 'FINANCIAL' | 'TICKETS' | 'DETAILS'>('FTTH');
 
+  // Integration Hub / SGP Data State
+  const [sgpData, setSgpData] = useState<any | null>(null);
+  const [isSgpSyncing, setIsSgpSyncing] = useState(false);
+
+  // Sync with SGP backend when drawer opens
+  useEffect(() => {
+    if (selectedCustomer) {
+      setIsSgpSyncing(true);
+      setSgpData(null);
+      fetch(`/api/integration/customer/${selectedCustomer.id}`, {
+        headers: { 'x-tenant-id': tenantId || 'default-tenant' }
+      })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data) setSgpData(data);
+      })
+      .catch(console.error)
+      .finally(() => setIsSgpSyncing(false));
+    } else {
+      setSgpData(null);
+    }
+  }, [selectedCustomer, tenantId]);
+
   // Handle URL query params for deep linking
   useEffect(() => {
     const custId = searchParams.get('id');
@@ -856,6 +879,15 @@ export default function Customer360() {
                 <h2 className="text-xl font-bold text-white tracking-tight">{selectedCustomer.name}</h2>
                 <p className="text-xs text-slate-300 font-mono mt-0.5">
                   Doc: {selectedCustomer.document} • MRR: {formatCurrency(selectedCustomer.mrr)}
+                  {isSgpSyncing ? (
+                    <span className="ml-3 inline-flex items-center text-blue-300 animate-pulse">
+                      <RefreshCw className="w-3 h-3 mr-1 animate-spin" /> Sincronizando SGP...
+                    </span>
+                  ) : sgpData ? (
+                    <span className="ml-3 inline-flex items-center text-emerald-300">
+                      <CheckCircle2 className="w-3 h-3 mr-1" /> SGP Sincronizado
+                    </span>
+                  ) : null}
                 </p>
               </div>
 
@@ -940,8 +972,8 @@ export default function Customer360() {
                   <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-4">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className={cn("w-3 h-3 rounded-full", selectedCustomer.fiberDetails?.onuStatus === 'ONLINE' ? "bg-emerald-500" : "bg-red-500 animate-ping")}></span>
-                        <h4 className="font-bold text-slate-900 text-sm">Status da ONU / ONT: {selectedCustomer.fiberDetails?.onuStatus || 'ONLINE'}</h4>
+                        <span className={cn("w-3 h-3 rounded-full", (sgpData?.network_status?.status || selectedCustomer.fiberDetails?.onuStatus) === 'ONLINE' ? "bg-emerald-500" : "bg-red-500 animate-ping")}></span>
+                        <h4 className="font-bold text-slate-900 text-sm">Status da ONU / ONT: {sgpData?.network_status?.status || selectedCustomer.fiberDetails?.onuStatus || 'ONLINE'}</h4>
                       </div>
                       <div className="flex gap-2">
                         <button
@@ -975,8 +1007,8 @@ export default function Customer360() {
                     {/* Optical Power Gauge */}
                     <div>
                       <div className="flex justify-between text-slate-600 font-semibold mb-1">
-                        <span>Potência Óptica Recebida (RX)</span>
-                        <span className="font-mono font-bold text-slate-900">{selectedCustomer.fiberDetails?.rxPower || -19.0} dBm (Faixa Ideal: -15 a -24 dBm)</span>
+                        <span>Potência Óptica Recebida (RX) {sgpData && <span className="text-[10px] text-blue-600 ml-1 font-bold">(Live SGP)</span>}</span>
+                        <span className="font-mono font-bold text-slate-900">{sgpData?.network_status?.rx_power || selectedCustomer.fiberDetails?.rxPower || -19.0} dBm (Faixa Ideal: -15 a -24 dBm)</span>
                       </div>
                       <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden flex">
                         <div className="w-[30%] bg-emerald-400" title="Excelente (-14 a -20 dBm)"></div>
@@ -1003,7 +1035,10 @@ export default function Customer360() {
                     <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-1">
                       <p className="text-[10px] uppercase font-bold text-slate-400">Usuário PPPoE</p>
                       <p className="font-mono font-bold text-slate-800">{selectedCustomer.fiberDetails?.pppoeUser || 'user_pppoe'}</p>
-                      <p className="text-slate-500 text-[11px] font-mono">IP: {selectedCustomer.fiberDetails?.ipAddress || '100.64.0.1'}</p>
+                      <p className="text-slate-500 text-[11px] font-mono flex flex-col gap-0.5">
+                        <span>IP: <span className={sgpData ? "text-blue-600 font-bold" : ""}>{sgpData?.network_status?.ip_address || selectedCustomer.fiberDetails?.ipAddress || '100.64.0.1'}</span></span>
+                        {sgpData && <span>MAC: {sgpData.network_status.mac_address}</span>}
+                      </p>
                     </div>
 
                     <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-1">

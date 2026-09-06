@@ -79,7 +79,7 @@ export default function Telephony() {
 
   // In-call Webphone Transfer
   const [isWebphoneTransferOpen, setIsWebphoneTransferOpen] = useState(false);
-  const [transferTarget, setTransferTarget] = useState('Ramal 102 - Carlos Ferreira');
+  const [transferTarget, setTransferTarget] = useState('Suporte N2');
   const [transferType, setTransferType] = useState<'BLIND' | 'ATTENDED'>('ATTENDED');
   const [webphoneNotice, setWebphoneNotice] = useState<string | null>(null);
 
